@@ -1,10 +1,5 @@
-/**
- *
- * \section COPYRIGHT
- *
- * Copyright 2013-2017 Software Radio Systems Limited
- *
- * \section LICENSE
+/*
+ * Copyright 2013-2020 Software Radio Systems Limited
  *
  * This file is part of srsLTE.
  *
@@ -24,279 +19,333 @@
  *
  */
 
-//#include "srslte/upper/s1ap_common.h"
+#include "srsepc/hdr/mme/s1ap_ctx_mngmt_proc.h"
+#include "srsepc/hdr/mme/s1ap.h"
 #include "srslte/common/bcd_helpers.h"
-#include "mme/s1ap.h"
-#include "mme/s1ap_ctx_mngmt_proc.h"
+#include "srslte/common/buffer_pool.h"
+#include "srslte/common/int_helpers.h"
 #include "srslte/common/liblte_security.h"
+#include <endian.h>
 
+namespace srsepc {
 
-namespace srsepc{
-
-s1ap_ctx_mngmt_proc*          s1ap_ctx_mngmt_proc::m_instance = NULL;
-boost::mutex   s1ap_ctx_mngmt_proc_instance_mutex;
-
+s1ap_ctx_mngmt_proc* s1ap_ctx_mngmt_proc::m_instance    = NULL;
+pthread_mutex_t      s1ap_ctx_mngmt_proc_instance_mutex = PTHREAD_MUTEX_INITIALIZER;
 
 s1ap_ctx_mngmt_proc::s1ap_ctx_mngmt_proc()
 {
+  return;
 }
 
 s1ap_ctx_mngmt_proc::~s1ap_ctx_mngmt_proc()
 {
+  return;
 }
 
-s1ap_ctx_mngmt_proc*
-s1ap_ctx_mngmt_proc::get_instance(void)
+s1ap_ctx_mngmt_proc* s1ap_ctx_mngmt_proc::get_instance()
 {
-  boost::mutex::scoped_lock lock(s1ap_ctx_mngmt_proc_instance_mutex);
-  if(NULL == m_instance) {
+  pthread_mutex_lock(&s1ap_ctx_mngmt_proc_instance_mutex);
+  if (NULL == m_instance) {
     m_instance = new s1ap_ctx_mngmt_proc();
   }
-  return(m_instance);
+  pthread_mutex_unlock(&s1ap_ctx_mngmt_proc_instance_mutex);
+  return (m_instance);
 }
 
-void
-s1ap_ctx_mngmt_proc::cleanup(void)
+void s1ap_ctx_mngmt_proc::cleanup()
 {
-  boost::mutex::scoped_lock lock(s1ap_ctx_mngmt_proc_instance_mutex);
-  if(NULL != m_instance) {
+  pthread_mutex_lock(&s1ap_ctx_mngmt_proc_instance_mutex);
+  if (NULL != m_instance) {
     delete m_instance;
     m_instance = NULL;
   }
+  pthread_mutex_unlock(&s1ap_ctx_mngmt_proc_instance_mutex);
 }
 
-void
-s1ap_ctx_mngmt_proc::init(void)
+void s1ap_ctx_mngmt_proc::init()
 {
-  m_s1ap     = s1ap::get_instance();
-  m_mme_gtpc = mme_gtpc::get_instance();
-  m_s1ap_log = m_s1ap->m_s1ap_log;
+  m_s1ap      = s1ap::get_instance();
+  m_mme_gtpc  = mme_gtpc::get_instance();
+  m_s1ap_log  = m_s1ap->m_s1ap_log;
   m_s1ap_args = m_s1ap->m_s1ap_args;
-  m_pool = srslte::byte_buffer_pool::get_instance();
-  m_s1ap_nas_transport = s1ap_nas_transport::get_instance();
+  m_pool      = srslte::byte_buffer_pool::get_instance();
 }
 
-bool
-s1ap_ctx_mngmt_proc::send_initial_context_setup_request(uint32_t mme_ue_s1ap_id, struct srslte::gtpc_create_session_response *cs_resp, struct srslte::gtpc_f_teid_ie sgw_ctrl_fteid)
+bool s1ap_ctx_mngmt_proc::send_initial_context_setup_request(nas* nas_ctx, uint16_t erab_to_setup)
 {
-  int s1mme = m_s1ap->get_s1_mme();
-
-  //Prepare reply PDU
-  LIBLTE_S1AP_S1AP_PDU_STRUCT pdu;
-  bzero(&pdu, sizeof(LIBLTE_S1AP_S1AP_PDU_STRUCT));
-  pdu.choice_type = LIBLTE_S1AP_S1AP_PDU_CHOICE_INITIATINGMESSAGE;
-
-  LIBLTE_S1AP_INITIATINGMESSAGE_STRUCT *init = &pdu.choice.initiatingMessage;
-  init->procedureCode = LIBLTE_S1AP_PROC_ID_INITIALCONTEXTSETUP;
-  init->choice_type   = LIBLTE_S1AP_INITIATINGMESSAGE_CHOICE_INITIALCONTEXTSETUPREQUEST;
-
-  LIBLTE_S1AP_MESSAGE_INITIALCONTEXTSETUPREQUEST_STRUCT *in_ctxt_req = &init->choice.InitialContextSetupRequest;
-  
-  LIBLTE_S1AP_E_RABTOBESETUPITEMCTXTSUREQ_STRUCT *erab_ctxt = &in_ctxt_req->E_RABToBeSetupListCtxtSUReq.buffer[0]; //FIXME support more than one erab
-  srslte::byte_buffer_t *reply_buffer = m_pool->allocate(); 
-
   m_s1ap_log->info("Preparing to send Initial Context Setup request\n");
 
-  //Find UE Context
-  ue_ctx_t *ue_ctx = m_s1ap->find_ue_ctx(mme_ue_s1ap_id);
-  if(ue_ctx == NULL)
-  {
-    m_s1ap_log->error("Could not find UE to send Setup Context Request. MME S1AP Id: %d", mme_ue_s1ap_id);
-    return false;
-  }
+  // Get UE Context/E-RAB Context to setup
+  emm_ctx_t* emm_ctx = &nas_ctx->m_emm_ctx;
+  ecm_ctx_t* ecm_ctx = &nas_ctx->m_ecm_ctx;
+  esm_ctx_t* esm_ctx = &nas_ctx->m_esm_ctx[erab_to_setup];
+  sec_ctx_t* sec_ctx = &nas_ctx->m_sec_ctx;
 
-  //Add MME and eNB S1AP Ids
-  in_ctxt_req->MME_UE_S1AP_ID.MME_UE_S1AP_ID = ue_ctx->mme_ue_s1ap_id;
-  in_ctxt_req->eNB_UE_S1AP_ID.ENB_UE_S1AP_ID = ue_ctx->enb_ue_s1ap_id;
+  // Prepare reply PDU
+  s1ap_pdu_t tx_pdu;
+  tx_pdu.set_init_msg().load_info_obj(ASN1_S1AP_ID_INIT_CONTEXT_SETUP);
 
-  //Set UE-AMBR
-  in_ctxt_req->uEaggregateMaximumBitrate.uEaggregateMaximumBitRateDL.BitRate=1000000000;//2^32-1
-  in_ctxt_req->uEaggregateMaximumBitrate.uEaggregateMaximumBitRateUL.BitRate=1000000000;//FIXME Get UE-AMBR from HSS
+  asn1::s1ap::init_context_setup_request_ies_container& in_ctx_req =
+      tx_pdu.init_msg().value.init_context_setup_request().protocol_ies;
 
-  //Setup eRAB context
-  in_ctxt_req->E_RABToBeSetupListCtxtSUReq.len = 1;
-  erab_ctxt->e_RAB_ID.E_RAB_ID = cs_resp->eps_bearer_context_created.ebi;
-  //Setup E-RAB QoS parameters
-  erab_ctxt->e_RABlevelQoSParameters.qCI.QCI = 9;
-  erab_ctxt->e_RABlevelQoSParameters.allocationRetentionPriority.priorityLevel.PriorityLevel = 15 ;//Lowest
-  erab_ctxt->e_RABlevelQoSParameters.allocationRetentionPriority.pre_emptionCapability = LIBLTE_S1AP_PRE_EMPTIONCAPABILITY_SHALL_NOT_TRIGGER_PRE_EMPTION;
-  erab_ctxt->e_RABlevelQoSParameters.allocationRetentionPriority.pre_emptionVulnerability = LIBLTE_S1AP_PRE_EMPTIONVULNERABILITY_PRE_EMPTABLE;
+  // Add MME and eNB S1AP Ids
+  in_ctx_req.mme_ue_s1ap_id.value = ecm_ctx->mme_ue_s1ap_id;
+  in_ctx_req.enb_ue_s1ap_id.value = ecm_ctx->enb_ue_s1ap_id;
 
-  erab_ctxt->e_RABlevelQoSParameters.gbrQosInformation_present=false;
-  
-  //Set E-RAB S-GW F-TEID
-  if (cs_resp->eps_bearer_context_created.s1_u_sgw_f_teid_present == false){
-    m_s1ap_log->error("Did not receive S1-U TEID in create session response\n");
-    return false;
-  } 
-  erab_ctxt->transportLayerAddress.n_bits = 32; //IPv4
-  uint32_t sgw_s1u_ip = htonl(cs_resp->eps_bearer_context_created.s1_u_sgw_f_teid.ipv4);
-  //uint32_t sgw_s1u_ip = cs_resp->eps_bearer_context_created.s1_u_sgw_f_teid.ipv4;
-  uint8_t *tmp_ptr =  erab_ctxt->transportLayerAddress.buffer;
-  liblte_value_2_bits(sgw_s1u_ip, &tmp_ptr, 32);//FIXME consider ipv6
+  // UE-AMBR
+  in_ctx_req.ueaggregate_maximum_bitrate.value.ueaggregate_maximum_bit_rate_dl = 1000000000;
+  in_ctx_req.ueaggregate_maximum_bitrate.value.ueaggregate_maximum_bit_rate_ul = 1000000000;
 
-  uint32_t tmp_teid = cs_resp->eps_bearer_context_created.s1_u_sgw_f_teid.teid; 
-  memcpy(erab_ctxt->gTP_TEID.buffer, &tmp_teid, sizeof(uint32_t));
+  // Number of E-RABs to be setup
+  in_ctx_req.erab_to_be_setup_list_ctxt_su_req.value.resize(1);
+  in_ctx_req.erab_to_be_setup_list_ctxt_su_req.value[0].load_info_obj(ASN1_S1AP_ID_ERAB_TO_BE_SETUP_ITEM_CTXT_SU_REQ);
 
-  //Set UE security capabilities and k_enb
-  bzero(in_ctxt_req->UESecurityCapabilities.encryptionAlgorithms.buffer,sizeof(uint8_t)*16); 
-  bzero(in_ctxt_req->UESecurityCapabilities.integrityProtectionAlgorithms.buffer,sizeof(uint8_t)*16); 
-  for(int i = 0; i<3; i++)
-  {
-    if(ue_ctx->ue_network_cap.eea[i+1] == true)
-    {
-      in_ctxt_req->UESecurityCapabilities.encryptionAlgorithms.buffer[i] = 1;          //EEA supported
+  // Setup eRAB context
+  asn1::s1ap::erab_to_be_setup_item_ctxt_su_req_s& erab_ctx_req =
+      in_ctx_req.erab_to_be_setup_list_ctxt_su_req.value[0].value.erab_to_be_setup_item_ctxt_su_req();
+  erab_ctx_req.erab_id = esm_ctx->erab_id;
+
+  // Setup E-RAB QoS parameters
+  erab_ctx_req.erab_level_qos_params.qci                             = esm_ctx->qci;
+  erab_ctx_req.erab_level_qos_params.alloc_retention_prio.prio_level = 15; // lowest
+  erab_ctx_req.erab_level_qos_params.alloc_retention_prio.pre_emption_cap =
+      asn1::s1ap::pre_emption_cap_opts::shall_not_trigger_pre_emption;
+  erab_ctx_req.erab_level_qos_params.alloc_retention_prio.pre_emption_vulnerability =
+      asn1::s1ap::pre_emption_vulnerability_opts::not_pre_emptable;
+  erab_ctx_req.erab_level_qos_params.gbr_qos_info_present = false;
+
+  // Set E-RAB S-GW F-TEID
+  erab_ctx_req.transport_layer_address.resize(32); // IPv4
+  asn1::bitstring_utils::from_number(
+      erab_ctx_req.transport_layer_address.data(), ntohl(esm_ctx->sgw_s1u_fteid.ipv4), 32);
+  erab_ctx_req.gtp_teid.from_number(esm_ctx->sgw_s1u_fteid.teid);
+
+  // Set UE security capabilities and k_enb
+  for (int i = 0; i < 3; i++) {
+    if (sec_ctx->ue_network_cap.eea[i + 1] == true) {
+      in_ctx_req.ue_security_cap.value.encryption_algorithms.set(16 - i, true); // EEA supported
+    } else {
+      in_ctx_req.ue_security_cap.value.encryption_algorithms.set(16 - i, false); // EEA not supported
     }
-    else
-    {
-      in_ctxt_req->UESecurityCapabilities.encryptionAlgorithms.buffer[i] = 0;          //EEA not supported
+    if (sec_ctx->ue_network_cap.eia[i + 1] == true) {
+      in_ctx_req.ue_security_cap.value.integrity_protection_algorithms.set(16 - i, true); // EIA supported
+    } else {
+      in_ctx_req.ue_security_cap.value.integrity_protection_algorithms.set(16 - i, false); // EIA not supported
     }
-    if(ue_ctx->ue_network_cap.eia[i+1] == true)
-    {
-      in_ctxt_req->UESecurityCapabilities.integrityProtectionAlgorithms.buffer[i] = 1;          //EEA supported
-    }
-    else
-    {
-      in_ctxt_req->UESecurityCapabilities.integrityProtectionAlgorithms.buffer[i] = 0;          //EEA not supported
-    }
-    // in_ctxt_req->UESecurityCapabilities.integrityProtectionAlgorithms.buffer[0] = 1; //EIA1
-  }
-  uint8_t key_enb[32];
-  liblte_security_generate_k_enb(ue_ctx->security_ctxt.k_asme, ue_ctx->security_ctxt.ul_nas_count, key_enb);
-  liblte_unpack(key_enb, 32, in_ctxt_req->SecurityKey.buffer);
-  m_s1ap_log->info("Generating KeNB with UL NAS COUNT: %d\n",ue_ctx->security_ctxt.ul_nas_count);
-  //Set Attach accepted and activat default bearer NAS messages
-  if(cs_resp->paa_present != true)
-  {
-    m_s1ap_log->error("PAA not present\n");
-    return false;
-  }
-  if(cs_resp->paa.pdn_type != srslte::GTPC_PDN_TYPE_IPV4)
-  {
-    m_s1ap_log->error("IPv6 not supported yet\n");
-    return false;
-  }
-  srslte::byte_buffer_t *nas_buffer = m_pool->allocate();
-  m_s1ap_nas_transport->pack_attach_accept(ue_ctx, erab_ctxt, &cs_resp->paa, nas_buffer); 
-
-  
-  LIBLTE_ERROR_ENUM err = liblte_s1ap_pack_s1ap_pdu(&pdu, (LIBLTE_BYTE_MSG_STRUCT*)reply_buffer);
-  if(err != LIBLTE_SUCCESS)
-  {
-    m_s1ap_log->error("Could not pack Initial Context Setup Request Message\n");
-    return false;
-  }
-  //Send Reply to eNB 
-  ssize_t n_sent = sctp_send(s1mme,reply_buffer->msg, reply_buffer->N_bytes, &ue_ctx->enb_sri, 0);
-  if(n_sent == -1)
-  {
-      m_s1ap_log->error("Failed to send Initial Context Setup Request\n");
-      return false;
   }
 
-  //Change E-RAB state to Context Setup Requested and save S-GW control F-TEID
-  ue_ctx->erabs_ctx[erab_ctxt->e_RAB_ID.E_RAB_ID].state = ERAB_CTX_REQUESTED;
-  ue_ctx->erabs_ctx[erab_ctxt->e_RAB_ID.E_RAB_ID].sgw_ctrl_fteid.teid = sgw_ctrl_fteid.teid;
-  ue_ctx->erabs_ctx[erab_ctxt->e_RAB_ID.E_RAB_ID].sgw_ctrl_fteid.ipv4 = sgw_ctrl_fteid.ipv4;
+  // Get K eNB
+  // memcpy(in_ctx_req.security_key.value.data(),sec_ctx->k_enb, 32);
+  for (uint8_t i = 0; i < 32; ++i) {
+    in_ctx_req.security_key.value.data()[31 - i] = sec_ctx->k_enb[i];
+  }
+  m_s1ap_log->info_hex(sec_ctx->k_enb, 32, "Initial Context Setup Request -- Key eNB (k_enb)\n");
+
+  srslte::unique_byte_buffer_t nas_buffer = allocate_unique_buffer(*m_pool);
+  if (emm_ctx->state == EMM_STATE_DEREGISTERED) {
+    // Attach procedure initiated from an attach request
+    m_s1ap_log->console("Adding attach accept to Initial Context Setup Request\n");
+    m_s1ap_log->info("Adding attach accept to Initial Context Setup Request\n");
+    nas_ctx->pack_attach_accept(nas_buffer.get());
+
+    // Add nas message to context setup request
+    erab_ctx_req.nas_pdu_present = true;
+    erab_ctx_req.nas_pdu.resize(nas_buffer->N_bytes);
+    memcpy(erab_ctx_req.nas_pdu.data(), nas_buffer->msg, nas_buffer->N_bytes);
+  }
+
+  if (!m_s1ap->s1ap_tx_pdu(tx_pdu, &ecm_ctx->enb_sri)) {
+    m_s1ap_log->error("Error sending Initial Context Setup Request.\n");
+    return false;
+  }
+
+  // Change E-RAB state to Context Setup Requested and save S-GW control F-TEID
+  esm_ctx->state = ERAB_CTX_REQUESTED;
 
   struct in_addr addr;
-  addr.s_addr = htonl(sgw_s1u_ip);
-  m_s1ap_log->info("Sent Intial Context Setup Request. E-RAB id %d \n",erab_ctxt->e_RAB_ID.E_RAB_ID);
-  m_s1ap_log->info("Initial Context -- S1-U TEID 0x%x. IP %s \n", tmp_teid,inet_ntoa(addr));
-  m_s1ap_log->console("Sent Intial Context Setup Request, E-RAB id %d\n",erab_ctxt->e_RAB_ID.E_RAB_ID);
-  m_s1ap_log->console("Initial Context -- S1-U TEID 0x%x. IP %s \n", tmp_teid,inet_ntoa(addr));
-
-  m_pool->deallocate(reply_buffer);
-  m_pool->deallocate(nas_buffer);
+  addr.s_addr = htonl(erab_ctx_req.transport_layer_address.to_number());
+  m_s1ap_log->console("Sent Initial Context Setup Request. E-RAB id %d \n", erab_ctx_req.erab_id);
+  m_s1ap_log->info(
+      "Initial Context -- S1-U TEID 0x%" PRIx64 ". IP %s \n", erab_ctx_req.gtp_teid.to_number(), inet_ntoa(addr));
+  m_s1ap_log->info("Initial Context Setup Request -- eNB UE S1AP Id %d, MME UE S1AP Id %" PRIu64 "\n",
+                   in_ctx_req.enb_ue_s1ap_id.value.value,
+                   in_ctx_req.mme_ue_s1ap_id.value.value);
+  m_s1ap_log->info("Initial Context Setup Request -- E-RAB id %d\n", erab_ctx_req.erab_id);
+  m_s1ap_log->info("Initial Context Setup Request -- S1-U TEID 0x%" PRIu64 ". IP %s \n",
+                   erab_ctx_req.gtp_teid.to_number(),
+                   inet_ntoa(addr));
+  m_s1ap_log->info("Initial Context Setup Request -- S1-U TEID 0x%" PRIu64 ". IP %s \n",
+                   erab_ctx_req.gtp_teid.to_number(),
+                   inet_ntoa(addr));
+  m_s1ap_log->info("Initial Context Setup Request -- QCI %d\n", erab_ctx_req.erab_level_qos_params.qci);
   return true;
 }
 
-bool
-s1ap_ctx_mngmt_proc::handle_initial_context_setup_response(LIBLTE_S1AP_MESSAGE_INITIALCONTEXTSETUPRESPONSE_STRUCT *in_ctxt_resp)
+bool s1ap_ctx_mngmt_proc::handle_initial_context_setup_response(
+    const asn1::s1ap::init_context_setup_resp_s& in_ctxt_resp)
 {
-
-  uint32_t mme_ue_s1ap_id = in_ctxt_resp->MME_UE_S1AP_ID.MME_UE_S1AP_ID;
-  ue_ctx_t *ue_ctx = m_s1ap->find_ue_ctx(mme_ue_s1ap_id);
-  if (ue_ctx == NULL)
-  {
+  uint32_t mme_ue_s1ap_id = in_ctxt_resp.protocol_ies.mme_ue_s1ap_id.value.value;
+  nas*     nas_ctx        = m_s1ap->find_nas_ctx_from_mme_ue_s1ap_id(mme_ue_s1ap_id);
+  if (nas_ctx == nullptr) {
     m_s1ap_log->error("Could not find UE's context in active UE's map\n");
     return false;
   }
 
-  //Setup E-RABs
-  for(uint32_t i=0; i<in_ctxt_resp->E_RABSetupListCtxtSURes.len;i++)
-  {
-    uint8_t erab_id = in_ctxt_resp->E_RABSetupListCtxtSURes.buffer[i].e_RAB_ID.E_RAB_ID;
-    erab_ctx_t *erab_ctx = &ue_ctx->erabs_ctx[erab_id];
-    if (erab_ctx->state != ERAB_CTX_REQUESTED)
-    {
-      m_s1ap_log->error("E-RAB requested was not active %d\n",erab_id);
+  emm_ctx_t* emm_ctx = &nas_ctx->m_emm_ctx;
+  ecm_ctx_t* ecm_ctx = &nas_ctx->m_ecm_ctx;
+
+  m_s1ap_log->console("Received Initial Context Setup Response\n");
+
+  // Setup E-RABs
+  for (const asn1::s1ap::protocol_ie_single_container_s<asn1::s1ap::erab_setup_item_ctxt_su_res_ies_o>& ie_container :
+       in_ctxt_resp.protocol_ies.erab_setup_list_ctxt_su_res.value) {
+
+    // Get E-RAB setup context item and E-RAB Id
+    const asn1::s1ap::erab_setup_item_ctxt_su_res_s& erab_setup_item_ctxt =
+        ie_container.value.erab_setup_item_ctxt_su_res();
+    uint8_t erab_id = erab_setup_item_ctxt.erab_id;
+
+    // Make sure we requested the context setup
+    esm_ctx_t* esm_ctx = &nas_ctx->m_esm_ctx[erab_id];
+    if (esm_ctx->state != ERAB_CTX_REQUESTED) {
+      m_s1ap_log->error("E-RAB requested was not previously requested %d\n", erab_id);
       return false;
     }
-    //Mark E-RAB with context setup
-    erab_ctx->state = ERAB_CTX_SETUP;
 
-    //Set the GTP information
-    uint8_t *bit_ptr = in_ctxt_resp->E_RABSetupListCtxtSURes.buffer[i].transportLayerAddress.buffer;
-    erab_ctx->enb_fteid.ipv4 = htonl(liblte_bits_2_value(&bit_ptr,32));
-    memcpy(&erab_ctx->enb_fteid.teid, in_ctxt_resp->E_RABSetupListCtxtSURes.buffer[i].gTP_TEID.buffer, 4);
-    erab_ctx->enb_fteid.teid = ntohl(erab_ctx->enb_fteid.teid);
+    // Mark E-RAB with context setup
+    esm_ctx->state = ERAB_CTX_SETUP;
 
-    char enb_addr_str[INET_ADDRSTRLEN+1];
-    const char *err = inet_ntop(AF_INET, &erab_ctx->enb_fteid.ipv4,enb_addr_str,sizeof(enb_addr_str));
-    if(err == NULL)
-    {
+    // Set the GTP information
+    esm_ctx->enb_fteid.teid = erab_setup_item_ctxt.gtp_teid.to_number();
+    esm_ctx->enb_fteid.ipv4 = ntohl(erab_setup_item_ctxt.transport_layer_address.to_number());
+
+    char           enb_addr_str[INET_ADDRSTRLEN + 1] = {};
+    struct in_addr tmp_addr                          = {};
+    tmp_addr.s_addr                                  = esm_ctx->enb_fteid.ipv4;
+    const char* err                                  = inet_ntop(AF_INET, &tmp_addr, enb_addr_str, INET_ADDRSTRLEN);
+    if (err == nullptr) {
       m_s1ap_log->error("Error converting IP to string\n");
     }
 
-    m_s1ap_log->info("E-RAB Context Setup. E-RAB id %d\n",erab_ctx->erab_id);
-    m_s1ap_log->info("E-RAB Context -- eNB TEID 0x%x, eNB Address %s\n", erab_ctx->enb_fteid.teid, enb_addr_str);
-    m_s1ap_log->console("E-RAB Context Setup. E-RAB id %d\n",erab_ctx->erab_id);
-    m_s1ap_log->console("E-RAB Context -- eNB TEID 0x%x; eNB GTP-U Address %s\n", erab_ctx->enb_fteid.teid, enb_addr_str);
+    m_s1ap_log->info("E-RAB Context Setup. E-RAB id %d\n", esm_ctx->erab_id);
+    m_s1ap_log->info("E-RAB Context -- eNB TEID 0x%x, eNB Address %s\n", esm_ctx->enb_fteid.teid, enb_addr_str);
+    m_s1ap_log->console("E-RAB Context Setup. E-RAB id %d\n", esm_ctx->erab_id);
+    m_s1ap_log->console(
+        "E-RAB Context -- eNB TEID 0x%x; eNB GTP-U Address %s\n", esm_ctx->enb_fteid.teid, enb_addr_str);
+  }
 
+  if (emm_ctx->state == EMM_STATE_REGISTERED) {
+    m_s1ap_log->console("Initial Context Setup Response triggered from Service Request.\n");
+    m_s1ap_log->console("Sending Modify Bearer Request.\n");
+    m_mme_gtpc->send_modify_bearer_request(emm_ctx->imsi, 5, &nas_ctx->m_esm_ctx[5].enb_fteid);
   }
   return true;
 }
 
-bool
-s1ap_ctx_mngmt_proc::handle_ue_context_release_request(LIBLTE_S1AP_MESSAGE_UECONTEXTRELEASEREQUEST_STRUCT *ue_rel, struct sctp_sndrcvinfo *enb_sri, srslte::byte_buffer_t *reply_buffer, bool *reply_flag)
+bool s1ap_ctx_mngmt_proc::handle_ue_context_release_request(const asn1::s1ap::ue_context_release_request_s& ue_rel,
+                                                            struct sctp_sndrcvinfo*                         enb_sri)
 {
-
-  uint32_t mme_ue_s1ap_id = ue_rel->MME_UE_S1AP_ID.MME_UE_S1AP_ID;
+  uint32_t mme_ue_s1ap_id = ue_rel.protocol_ies.mme_ue_s1ap_id.value.value;
   m_s1ap_log->info("Received UE Context Release Request. MME-UE S1AP Id: %d\n", mme_ue_s1ap_id);
   m_s1ap_log->console("Received UE Context Release Request. MME-UE S1AP Id %d\n", mme_ue_s1ap_id);
 
-  ue_ctx_t *ue_ctx = m_s1ap->find_ue_ctx(mme_ue_s1ap_id);
-  if(ue_ctx == NULL)
-  {
-    m_s1ap_log->info("UE not found. MME-UE S1AP Id: %d\n", mme_ue_s1ap_id);
+  nas* nas_ctx = m_s1ap->find_nas_ctx_from_mme_ue_s1ap_id(mme_ue_s1ap_id);
+  if (nas_ctx == nullptr) {
+    m_s1ap_log->info("No UE context to release found. MME-UE S1AP Id: %d\n", mme_ue_s1ap_id);
+    m_s1ap_log->console("No UE context to release found. MME-UE S1AP Id: %d\n", mme_ue_s1ap_id);
     return false;
   }
 
-  //Delete any context at the SPGW
-  bool active = false;
-  for(int i=0;i<MAX_ERABS_PER_UE;i++)
-  {
-    if(ue_ctx->erabs_ctx[i].state != ERAB_DEACTIVATED)
-    {
-      active = true;
-      //ue_ctx->erabs_ctx[i].state = ERAB_DEACTIVATED;
-      break;
+  emm_ctx_t* emm_ctx = &nas_ctx->m_emm_ctx;
+  ecm_ctx_t* ecm_ctx = &nas_ctx->m_ecm_ctx;
+
+  // Delete user plane context at the SPGW (but keep GTP-C connection).
+  if (ecm_ctx->state == ECM_STATE_CONNECTED) {
+    // There are active E-RABs, send release access mearers request
+    m_s1ap_log->console("There are active E-RABs, send release access bearers request\n");
+    m_s1ap_log->info("There are active E-RABs, send release access bearers request\n");
+
+    // The handle_release_access_bearers_response function will make sure to mark E-RABS DEACTIVATED
+    // It will release the UEs downstream S1-u and keep the upstream S1-U connection active.
+    m_mme_gtpc->send_release_access_bearers_request(emm_ctx->imsi);
+
+    // Send release context command to enb, so that it can release it's bearers
+    send_ue_context_release_command(nas_ctx);
+  } else {
+    // No ECM Context to release
+    m_s1ap_log->info("UE is not ECM connected. No need to release S1-U. MME UE S1AP Id %d\n", mme_ue_s1ap_id);
+    m_s1ap_log->console("UE is not ECM connected. No need to release S1-U. MME UE S1AP Id %d\n", mme_ue_s1ap_id);
+    // Make sure E-RABS are marked as DEACTIVATED.
+    for (esm_ctx_t& esm_ctx : nas_ctx->m_esm_ctx) {
+      esm_ctx.state = ERAB_DEACTIVATED;
     }
   }
-  if(active == true)
-  {
-    //There are active E-RABs, send delete session request
-    m_mme_gtpc->send_delete_session_request(ue_ctx);
-  }
-  //m_s1ap->delete_ue_ctx(ue_ctx);
-  for(int i=0;i<MAX_ERABS_PER_UE;i++)
-  {
-    ue_ctx->erabs_ctx[i].state = ERAB_DEACTIVATED;
-  }
-  //Delete UE context
-  m_s1ap_log->info("Deleted UE Context.\n");
+
+  // Set UE context will be cleared upon reception of UE Context Release Complete
   return true;
 }
 
-} //namespace srsepc
+bool s1ap_ctx_mngmt_proc::send_ue_context_release_command(nas* nas_ctx)
+{
+  // Prepare reply PDU
+  s1ap_pdu_t tx_pdu;
+  tx_pdu.set_init_msg().load_info_obj(ASN1_S1AP_ID_UE_CONTEXT_RELEASE);
+
+  asn1::s1ap::ue_context_release_cmd_ies_container& ctx_rel_cmd =
+      tx_pdu.init_msg().value.ue_context_release_cmd().protocol_ies;
+  ctx_rel_cmd.ue_s1ap_ids.value.set(asn1::s1ap::ue_s1ap_ids_c::types_opts::ue_s1ap_id_pair);
+  ctx_rel_cmd.ue_s1ap_ids.value.ue_s1ap_id_pair().mme_ue_s1ap_id = nas_ctx->m_ecm_ctx.mme_ue_s1ap_id;
+  ctx_rel_cmd.ue_s1ap_ids.value.ue_s1ap_id_pair().enb_ue_s1ap_id = nas_ctx->m_ecm_ctx.enb_ue_s1ap_id;
+
+  ctx_rel_cmd.cause.value.set(asn1::s1ap::cause_c::types_opts::nas);
+  ctx_rel_cmd.cause.value.nas().value = asn1::s1ap::cause_nas_opts::options::normal_release;
+
+  // Send Reply to eNB
+  if (!m_s1ap->s1ap_tx_pdu(tx_pdu, &nas_ctx->m_ecm_ctx.enb_sri)) {
+    m_s1ap_log->error("Error sending UE Context Release Command.\n");
+    return false;
+  }
+
+  return true;
+}
+
+bool s1ap_ctx_mngmt_proc::handle_ue_context_release_complete(const asn1::s1ap::ue_context_release_complete_s& rel_comp)
+{
+  uint32_t mme_ue_s1ap_id = rel_comp.protocol_ies.mme_ue_s1ap_id.value.value;
+  m_s1ap_log->info("Received UE Context Release Complete. MME-UE S1AP Id: %d\n", mme_ue_s1ap_id);
+  m_s1ap_log->console("Received UE Context Release Complete. MME-UE S1AP Id %d\n", mme_ue_s1ap_id);
+
+  nas* nas_ctx = m_s1ap->find_nas_ctx_from_mme_ue_s1ap_id(mme_ue_s1ap_id);
+  if (nas_ctx == nullptr) {
+    m_s1ap_log->info("No UE context to release found. MME-UE S1AP Id: %d\n", mme_ue_s1ap_id);
+    m_s1ap_log->console("No UE context to release found. MME-UE S1AP Id: %d\n", mme_ue_s1ap_id);
+    return false;
+  }
+  emm_ctx_t* emm_ctx = &nas_ctx->m_emm_ctx;
+  ecm_ctx_t* ecm_ctx = &nas_ctx->m_ecm_ctx;
+
+  // Delete user plane context at the SPGW (but keep GTP-C connection).
+  if (ecm_ctx->state == ECM_STATE_CONNECTED) {
+    // There are active E-RABs, send release access mearers request
+    m_s1ap_log->console("There are active E-RABs, send release access bearers request\n");
+    m_s1ap_log->info("There are active E-RABs, send release access bearers request\n");
+    m_mme_gtpc->send_release_access_bearers_request(emm_ctx->imsi);
+    // The handle_release_access_bearers_response function will make sure to mark E-RABS DEACTIVATED
+    // It will release the UEs downstream S1-U and keep the upstream S1-U connection active.
+  } else {
+    // No ECM Context to release
+    m_s1ap_log->info("UE is not ECM connected. No need to release S1-U. MME UE S1AP Id %d\n", mme_ue_s1ap_id);
+    m_s1ap_log->console("UE is not ECM connected. No need to release S1-U. MME UE S1AP Id %d\n", mme_ue_s1ap_id);
+    // Make sure E-RABS are marked as DEACTIVATED.
+    for (esm_ctx_t& esm_ctx : nas_ctx->m_esm_ctx) {
+      esm_ctx.state = ERAB_DEACTIVATED;
+    }
+  }
+
+  // Delete UE context
+  m_s1ap->release_ue_ecm_ctx(nas_ctx->m_ecm_ctx.mme_ue_s1ap_id);
+  m_s1ap_log->info("UE Context Release Completed.\n");
+  m_s1ap_log->console("UE Context Release Completed.\n");
+  return true;
+}
+} // namespace srsepc

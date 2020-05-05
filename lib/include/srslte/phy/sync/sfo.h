@@ -1,12 +1,7 @@
-/**
+/*
+ * Copyright 2013-2020 Software Radio Systems Limited
  *
- * \section COPYRIGHT
- *
- * Copyright 2013-2015 Software Radio Systems Limited
- *
- * \section LICENSE
- *
- * This file is part of the srsLTE library.
+ * This file is part of srsLTE.
  *
  * srsLTE is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Affero General Public License as
@@ -32,18 +27,13 @@
  *  Reference:
  *****************************************************************************/
 
-#ifndef SFO_
-#define SFO_
+#ifndef SRSLTE_SFO_H
+#define SRSLTE_SFO_H
 
 #include "srslte/config.h"
 
-SRSLTE_API float srslte_sfo_estimate(int *t0, 
-                                     int len, 
-                                     float period);
+SRSLTE_API float srslte_sfo_estimate(int* t0, int len, float period);
 
-SRSLTE_API float srslte_sfo_estimate_period(int *t0, 
-                                            int *t, 
-                                            int len, 
-                                            float period);
+SRSLTE_API float srslte_sfo_estimate_period(int* t0, int* t, int len, float period);
 
-#endif // SFO_
+#endif // SRSLTE_SFO_H

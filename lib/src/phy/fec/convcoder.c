@@ -1,12 +1,7 @@
-/**
+/*
+ * Copyright 2013-2020 Software Radio Systems Limited
  *
- * \section COPYRIGHT
- *
- * Copyright 2013-2015 Software Radio Systems Limited
- *
- * \section LICENSE
- *
- * This file is part of the srsLTE library.
+ * This file is part of srsLTE.
  *
  * srsLTE is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Affero General Public License as
@@ -24,14 +19,13 @@
  *
  */
 
-
-#include <stdlib.h>
-#include <stdio.h>
-#include <stdint.h>
 #include <math.h>
+#include <stdint.h>
+#include <stdio.h>
+#include <stdlib.h>
 
-#include "srslte/phy/fec/convcoder.h"
 #include "parity.h"
+#include "srslte/phy/fec/convcoder.h"
 
 /**
  * Convolution encodes according to given parameters.
@@ -46,19 +40,16 @@
  * @param[in] frame_length Number of bits in input_array
  * @return Number of bits in output
  */
-int srslte_convcoder_encode(srslte_convcoder_t *q, uint8_t *input, uint8_t *output, uint32_t frame_length) {
+int srslte_convcoder_encode(srslte_convcoder_t* q, uint8_t* input, uint8_t* output, uint32_t frame_length)
+{
   uint32_t sr;
-  uint32_t i,j;
+  uint32_t i, j;
 
-  if (q                 != NULL    &&
-      input             != NULL    &&
-      output            != NULL    &&
-      frame_length      > q->K + 1)
-  {
+  if (q != NULL && input != NULL && output != NULL && frame_length > q->K + 1) {
     uint32_t len = q->tail_biting ? frame_length : (frame_length + q->K - 1);
     if (q->tail_biting) {
       sr = 0;
-      for (i=frame_length - q->K + 1; i<frame_length; i++) {
+      for (i = frame_length - q->K + 1; i < frame_length; i++) {
         sr = (sr << 1) | (input[i] & 1);
       }
     } else {
@@ -66,14 +57,13 @@ int srslte_convcoder_encode(srslte_convcoder_t *q, uint8_t *input, uint8_t *outp
     }
     for (i = 0; i < len; i++) {
       uint8_t bit = (i < frame_length) ? (input[i] & 1) : 0;
-      sr = (sr << 1) | bit;
-      for (j=0;j<q->R;j++) {
+      sr          = (sr << 1) | bit;
+      for (j = 0; j < q->R; j++) {
         output[q->R * i + j] = parity(sr & q->poly[j]);
       }
     }
-    return q->R*len;
+    return q->R * len;
   } else {
     return SRSLTE_ERROR_INVALID_INPUTS;
   }
 }
-

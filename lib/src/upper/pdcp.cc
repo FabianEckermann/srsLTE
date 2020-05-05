@@ -1,19 +1,14 @@
-/**
+/*
+ * Copyright 2013-2020 Software Radio Systems Limited
  *
- * \section COPYRIGHT
+ * This file is part of srsLTE.
  *
- * Copyright 2013-2015 Software Radio Systems Limited
- *
- * \section LICENSE
- *
- * This file is part of the srsUE library.
- *
- * srsUE is free software: you can redistribute it and/or modify
+ * srsLTE is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Affero General Public License as
  * published by the Free Software Foundation, either version 3 of
  * the License, or (at your option) any later version.
  *
- * srsUE is distributed in the hope that it will be useful,
+ * srsLTE is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU Affero General Public License for more details.
@@ -24,163 +19,271 @@
  *
  */
 
-
 #include "srslte/upper/pdcp.h"
 
 namespace srslte {
 
-pdcp::pdcp()
-{
-  rlc = NULL;
-  rrc = NULL;
-  gw = NULL;
-  pdcp_log = NULL;
-  lcid = 0;
-  direction = 0;
-}
-
-void pdcp::init(srsue::rlc_interface_pdcp *rlc_, srsue::rrc_interface_pdcp *rrc_, srsue::gw_interface_pdcp *gw_, log *pdcp_log_, uint32_t lcid_, uint8_t direction_)
-{
-  rlc       = rlc_;
-  rrc       = rrc_;
-  gw        = gw_;
-  pdcp_log  = pdcp_log_;
-  lcid      = lcid_;
-  direction = direction_;
-
-  // Default config
-  srslte_pdcp_config_t cnfg;
-  cnfg.is_control = false;
-  cnfg.is_data = false;
-  cnfg.direction = direction_;
-
-  pdcp_array[0].init(rlc, rrc, gw, pdcp_log, lcid, cnfg);
-}
-
-void pdcp::stop()
+pdcp::pdcp(srslte::task_handler_interface* task_executor_, const char* logname) :
+  task_executor(task_executor_),
+  pdcp_log(logname)
 {
 }
 
-void pdcp::reestablish() {
-  for(uint32_t i=0;i<SRSLTE_N_RADIO_BEARERS;i++) {
-    if (pdcp_array[i].is_active()) {
-      pdcp_array[i].reestablish();
-    }
+pdcp::~pdcp()
+{
+  {
+    std::lock_guard<std::mutex> lock(cache_mutex);
+    valid_lcids_cached.clear();
+  }
+  // destroy all remaining entities
+  pdcp_array.clear();
+  pdcp_array_mrb.clear();
+}
+
+void pdcp::init(srsue::rlc_interface_pdcp* rlc_, srsue::rrc_interface_pdcp* rrc_, srsue::gw_interface_pdcp* gw_)
+{
+  rlc = rlc_;
+  rrc = rrc_;
+  gw  = gw_;
+}
+
+void pdcp::stop() {}
+
+void pdcp::reestablish()
+{
+  for (auto& lcid_it : pdcp_array) {
+    lcid_it.second->reestablish();
+  }
+}
+
+void pdcp::reestablish(uint32_t lcid)
+{
+  if (valid_lcid(lcid)) {
+    pdcp_array.at(lcid)->reestablish();
   }
 }
 
 void pdcp::reset()
 {
-  for(uint32_t i=0;i<SRSLTE_N_RADIO_BEARERS;i++) {
-    pdcp_array[i].reset();
+  {
+    std::lock_guard<std::mutex> lock(cache_mutex);
+    valid_lcids_cached.clear();
   }
-
-  pdcp_array[0].init(rlc, rrc, gw, pdcp_log, lcid, direction);
+  // destroy all bearers
+  pdcp_array.clear();
 }
 
 /*******************************************************************************
   RRC/GW interface
 *******************************************************************************/
-bool pdcp::is_drb_enabled(uint32_t lcid)
+
+// NOTE: Called from separate thread
+bool pdcp::is_lcid_enabled(uint32_t lcid)
 {
-  if(lcid >= SRSLTE_N_RADIO_BEARERS) {
-    pdcp_log->error("Radio bearer id must be in [0:%d] - %d\n", SRSLTE_N_RADIO_BEARERS, lcid);
-    return false;
-  }
-  return pdcp_array[lcid].is_active();
+  std::lock_guard<std::mutex> lock(cache_mutex);
+  return valid_lcids_cached.count(lcid) > 0;
 }
 
-void pdcp::write_sdu(uint32_t lcid, byte_buffer_t *sdu)
+void pdcp::write_sdu(uint32_t lcid, unique_byte_buffer_t sdu, bool blocking)
 {
-  if(valid_lcid(lcid))
-    pdcp_array[lcid].write_sdu(sdu);
+  if (valid_lcid(lcid)) {
+    pdcp_array.at(lcid)->write_sdu(std::move(sdu), blocking);
+  } else {
+    pdcp_log->warning("Writing sdu: lcid=%d. Deallocating sdu\n", lcid);
+  }
 }
 
-void pdcp::add_bearer(uint32_t lcid, srslte_pdcp_config_t cfg)
+void pdcp::write_sdu_mch(uint32_t lcid, unique_byte_buffer_t sdu)
 {
-  if(lcid >= SRSLTE_N_RADIO_BEARERS) {
-    pdcp_log->error("Radio bearer id must be in [0:%d] - %d\n", SRSLTE_N_RADIO_BEARERS, lcid);
-    return;
+  if (valid_mch_lcid(lcid)) {
+    pdcp_array_mrb.at(lcid)->write_sdu(std::move(sdu), true);
   }
-  if (!pdcp_array[lcid].is_active()) {
-    pdcp_array[lcid].init(rlc, rrc, gw, pdcp_log, lcid, cfg);
-    pdcp_log->info("Added bearer %s\n", rrc->get_rb_name(lcid).c_str());
+}
+
+void pdcp::add_bearer(uint32_t lcid, pdcp_config_t cfg)
+{
+  if (not valid_lcid(lcid)) {
+    if (not pdcp_array
+                .insert(std::make_pair(
+                    lcid, std::unique_ptr<pdcp_entity_lte>(new pdcp_entity_lte(rlc, rrc, gw, task_executor, pdcp_log))))
+                .second) {
+      pdcp_log->error("Error inserting PDCP entity in to array\n.");
+      return;
+    }
+    pdcp_array.at(lcid)->init(lcid, cfg);
+    pdcp_log->info("Add %s (lcid=%d, bearer_id=%d, sn_len=%dbits)\n",
+                   rrc->get_rb_name(lcid).c_str(),
+                   lcid,
+                   cfg.bearer_id,
+                   cfg.sn_len);
+    {
+      std::lock_guard<std::mutex> lock(cache_mutex);
+      valid_lcids_cached.insert(lcid);
+    }
   } else {
     pdcp_log->warning("Bearer %s already configured. Reconfiguration not supported\n", rrc->get_rb_name(lcid).c_str());
   }
 }
 
-void pdcp::config_security(uint32_t lcid,
-                           uint8_t *k_enc,
-                           uint8_t *k_int,
-                           CIPHERING_ALGORITHM_ID_ENUM cipher_algo,
-                           INTEGRITY_ALGORITHM_ID_ENUM integ_algo)
+void pdcp::add_bearer_mrb(uint32_t lcid, pdcp_config_t cfg)
 {
-  if(valid_lcid(lcid))
-    pdcp_array[lcid].config_security(k_enc, k_int, cipher_algo, integ_algo);
-}
-
-void pdcp::config_security_all(uint8_t *k_enc,
-                               uint8_t *k_int,
-                               CIPHERING_ALGORITHM_ID_ENUM cipher_algo,
-                               INTEGRITY_ALGORITHM_ID_ENUM integ_algo)
-{
-  for(uint32_t i=0;i<SRSLTE_N_RADIO_BEARERS;i++) {
-    if (pdcp_array[i].is_active()) {
-      pdcp_array[i].config_security(k_enc, k_int, cipher_algo, integ_algo);
+  if (not valid_mch_lcid(lcid)) {
+    if (not pdcp_array_mrb
+                .insert(std::make_pair(
+                    lcid, std::unique_ptr<pdcp_entity_lte>(new pdcp_entity_lte(rlc, rrc, gw, task_executor, pdcp_log))))
+                .second) {
+      pdcp_log->error("Error inserting PDCP entity in to array\n.");
+      return;
     }
+    pdcp_array_mrb.at(lcid)->init(lcid, cfg);
+    pdcp_log->info("Add %s (lcid=%d, bearer_id=%d, sn_len=%dbits)\n",
+                   rrc->get_rb_name(lcid).c_str(),
+                   lcid,
+                   cfg.bearer_id,
+                   cfg.sn_len);
+  } else {
+    pdcp_log->warning("Bearer %s already configured. Reconfiguration not supported\n", rrc->get_rb_name(lcid).c_str());
   }
 }
 
-void pdcp::enable_integrity(uint32_t lcid)
+void pdcp::del_bearer(uint32_t lcid)
 {
-  if(valid_lcid(lcid))
-    pdcp_array[lcid].enable_integrity();
+  {
+    std::lock_guard<std::mutex> lock(cache_mutex);
+    valid_lcids_cached.erase(lcid);
+  }
+  if (valid_lcid(lcid)) {
+    pdcp_array.erase(lcid);
+    pdcp_log->warning("Deleted PDCP bearer %s\n", rrc->get_rb_name(lcid).c_str());
+  } else {
+    pdcp_log->warning("Can't delete bearer %s. Bearer doesn't exist.\n", rrc->get_rb_name(lcid).c_str());
+  }
 }
 
-void pdcp::enable_encryption(uint32_t lcid)
+void pdcp::change_lcid(uint32_t old_lcid, uint32_t new_lcid)
 {
-  if(valid_lcid(lcid))
-    pdcp_array[lcid].enable_encryption();
+  // make sure old LCID exists and new LCID is still free
+  if (valid_lcid(old_lcid) && not valid_lcid(new_lcid)) {
+    // insert old PDCP entity into new LCID
+    std::lock_guard<std::mutex>      lock(cache_mutex);
+    auto                             it          = pdcp_array.find(old_lcid);
+    std::unique_ptr<pdcp_entity_lte> pdcp_entity = std::move(it->second);
+    if (not pdcp_array.insert(std::make_pair(new_lcid, std::move(pdcp_entity))).second) {
+      pdcp_log->error("Error inserting PDCP entity into array\n.");
+      return;
+    }
+    // erase from old position
+    pdcp_array.erase(it);
+    valid_lcids_cached.erase(old_lcid);
+    valid_lcids_cached.insert(new_lcid);
+    pdcp_log->warning("Changed LCID of PDCP bearer from %d to %d\n", old_lcid, new_lcid);
+  } else {
+    pdcp_log->error(
+        "Can't change PDCP of bearer %s from %d to %d. Bearer doesn't exist or new LCID already occupied.\n",
+        rrc->get_rb_name(old_lcid).c_str(),
+        old_lcid,
+        new_lcid);
+  }
+}
+
+void pdcp::config_security(uint32_t lcid, as_security_config_t sec_cfg)
+{
+  if (valid_lcid(lcid)) {
+    pdcp_array.at(lcid)->config_security(sec_cfg);
+  }
+}
+
+void pdcp::config_security_all(as_security_config_t sec_cfg)
+{
+  for (auto& it : pdcp_array) {
+    it.second->config_security(sec_cfg);
+  }
+}
+
+void pdcp::enable_integrity(uint32_t lcid, srslte_direction_t direction)
+{
+  if (valid_lcid(lcid)) {
+    pdcp_array.at(lcid)->enable_integrity(direction);
+  }
+}
+
+void pdcp::enable_encryption(uint32_t lcid, srslte_direction_t direction)
+{
+  if (valid_lcid(lcid)) {
+    pdcp_array.at(lcid)->enable_encryption(direction);
+  }
+}
+
+void pdcp::enable_security_timed(uint32_t lcid, srslte_direction_t direction, uint32_t sn)
+{
+  if (valid_lcid(lcid)) {
+    pdcp_array.at(lcid)->enable_security_timed(direction, sn);
+  }
+}
+
+bool pdcp::get_bearer_status(uint32_t lcid, uint16_t* dlsn, uint16_t* dlhfn, uint16_t* ulsn, uint16_t* ulhfn)
+{
+  if (not valid_lcid(lcid)) {
+    return false;
+  }
+  pdcp_array[lcid]->get_bearer_status(dlsn, dlhfn, ulsn, ulhfn);
+  return true;
 }
 
 /*******************************************************************************
   RLC interface
 *******************************************************************************/
-void pdcp::write_pdu(uint32_t lcid, byte_buffer_t *pdu)
+void pdcp::write_pdu(uint32_t lcid, unique_byte_buffer_t pdu)
 {
-  if(valid_lcid(lcid))
-    pdcp_array[lcid].write_pdu(pdu);
+  if (valid_lcid(lcid)) {
+    pdcp_array.at(lcid)->write_pdu(std::move(pdu));
+  } else {
+    pdcp_log->warning("Writing pdu: lcid=%d. Deallocating pdu\n", lcid);
+  }
 }
 
-void pdcp::write_pdu_bcch_bch(byte_buffer_t *sdu)
+void pdcp::write_pdu_bcch_bch(unique_byte_buffer_t sdu)
 {
-  rrc->write_pdu_bcch_bch(sdu);
-}
-void pdcp::write_pdu_bcch_dlsch(byte_buffer_t *sdu)
-{
-  rrc->write_pdu_bcch_dlsch(sdu);
+  rrc->write_pdu_bcch_bch(std::move(sdu));
 }
 
-void pdcp::write_pdu_pcch(byte_buffer_t *sdu)
+void pdcp::write_pdu_bcch_dlsch(unique_byte_buffer_t sdu)
 {
-  rrc->write_pdu_pcch(sdu);
+  rrc->write_pdu_bcch_dlsch(std::move(sdu));
 }
 
-/*******************************************************************************
-  Helpers
-*******************************************************************************/
+void pdcp::write_pdu_pcch(unique_byte_buffer_t sdu)
+{
+  rrc->write_pdu_pcch(std::move(sdu));
+}
+
+void pdcp::write_pdu_mch(uint32_t lcid, unique_byte_buffer_t sdu)
+{
+  if (0 == lcid) {
+    rrc->write_pdu_mch(lcid, std::move(sdu));
+  } else {
+    gw->write_pdu_mch(lcid, std::move(sdu));
+  }
+}
+
 bool pdcp::valid_lcid(uint32_t lcid)
 {
-  if(lcid >= SRSLTE_N_RADIO_BEARERS) {
+  if (lcid >= SRSLTE_N_RADIO_BEARERS) {
     pdcp_log->error("Radio bearer id must be in [0:%d] - %d", SRSLTE_N_RADIO_BEARERS, lcid);
     return false;
   }
-  if(!pdcp_array[lcid].is_active()) {
-    pdcp_log->error("PDCP entity for logical channel %d has not been activated\n", lcid);
-    return false;
-  }
-  return true;
+
+  return pdcp_array.find(lcid) != pdcp_array.end();
 }
 
-} // namespace srsue
+bool pdcp::valid_mch_lcid(uint32_t lcid)
+{
+  if (lcid >= SRSLTE_N_MCH_LCIDS) {
+    pdcp_log->error("Radio bearer id must be in [0:%d] - %d", SRSLTE_N_RADIO_BEARERS, lcid);
+    return false;
+  }
+
+  return pdcp_array_mrb.find(lcid) != pdcp_array_mrb.end();
+}
+
+} // namespace srslte

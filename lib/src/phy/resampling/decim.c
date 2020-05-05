@@ -1,12 +1,7 @@
-/**
+/*
+ * Copyright 2013-2020 Software Radio Systems Limited
  *
- * \section COPYRIGHT
- *
- * Copyright 2013-2015 Software Radio Systems Limited
- *
- * \section LICENSE
- *
- * This file is part of the srsLTE library.
+ * This file is part of srsLTE.
  *
  * srsLTE is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Affero General Public License as
@@ -24,25 +19,25 @@
  *
  */
 
-#include <complex.h>
-#include <math.h>
 #include "srslte/phy/resampling/decim.h"
 #include "srslte/phy/utils/debug.h"
-
+#include <complex.h>
+#include <math.h>
 
 /* Performs integer linear decimation by a factor of M */
-void srslte_decim_c(cf_t *input, cf_t *output, int M, int len) {
+void srslte_decim_c(cf_t* input, cf_t* output, int M, int len)
+{
   int i;
-  for (i=0;i<len/M;i++) {
-    output[i] = input[i*M];
+  for (i = 0; i < len / M; i++) {
+    output[i] = input[i * M];
   }
 }
 
-
 /* Performs integer linear decimation by a factor of M */
-void srslte_decim_f(float *input, float *output, int M, int len) {
+void srslte_decim_f(float* input, float* output, int M, int len)
+{
   int i;
-  for (i=0;i<len/M;i++) {
-    output[i] = input[i*M];
+  for (i = 0; i < len / M; i++) {
+    output[i] = input[i * M];
   }
 }

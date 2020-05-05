@@ -1,19 +1,14 @@
-/**
- *
- * \section COPYRIGHT
- *
- * Copyright 2013-2017 Software Radio Systems Limited
- *
- * \section LICENSE
+/*
+ * Copyright 2013-2020 Software Radio Systems Limited
  *
  * This file is part of srsLTE.
  *
- * srsUE is free software: you can redistribute it and/or modify
+ * srsLTE is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Affero General Public License as
  * published by the Free Software Foundation, either version 3 of
  * the License, or (at your option) any later version.
  *
- * srsUE is distributed in the hope that it will be useful,
+ * srsLTE is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU Affero General Public License for more details.
@@ -24,78 +19,87 @@
  *
  */
 
-#ifndef ENBPHY_H
-#define ENBPHY_H
+#ifndef SRSENB_PHY_H
+#define SRSENB_PHY_H
 
+#include "phy_common.h"
+#include "sf_worker.h"
+#include "srsenb/hdr/phy/enb_phy_base.h"
 #include "srslte/common/log.h"
-#include "phy/txrx.h"
-#include "phy/phch_worker.h"
-#include "phy/phch_common.h"
-#include "srslte/radio/radio.h"
-#include "srslte/interfaces/enb_interfaces.h"
-#include "srslte/common/task_dispatcher.h"
+#include "srslte/common/log_filter.h"
 #include "srslte/common/trace.h"
+#include "srslte/interfaces/enb_interfaces.h"
 #include "srslte/interfaces/enb_metrics_interface.h"
+#include "srslte/interfaces/radio_interfaces.h"
+#include "srslte/radio/radio.h"
+#include "txrx.h"
 
 namespace srsenb {
- 
-typedef struct {
-  srslte_cell_t cell; 
-  LIBLTE_RRC_PRACH_CONFIG_SIB_STRUCT          prach_cnfg;
-  LIBLTE_RRC_PDSCH_CONFIG_COMMON_STRUCT       pdsch_cnfg;
-  LIBLTE_RRC_PUSCH_CONFIG_COMMON_STRUCT       pusch_cnfg;
-  LIBLTE_RRC_PUCCH_CONFIG_COMMON_STRUCT       pucch_cnfg;
-  LIBLTE_RRC_SRS_UL_CONFIG_COMMON_STRUCT      srs_ul_cnfg;    
-} phy_cfg_t; 
 
-class phy : public phy_interface_mac,
-            public phy_interface_rrc
+class phy final : public enb_phy_base, public phy_interface_stack_lte, public srslte::phy_interface_radio
 {
 public:
+  phy(srslte::logger* logger_);
+  ~phy();
 
-  phy();
-  bool init(phy_args_t *args, phy_cfg_t *common_cfg, srslte::radio *radio_handler, mac_interface_phy *mac, srslte::log* log_h);
-  bool init(phy_args_t *args, phy_cfg_t *common_cfg, srslte::radio *radio_handler, mac_interface_phy *mac, std::vector<void*> log_vec);
-  void stop();
-  
+  int  init(const phy_args_t&            args,
+            const phy_cfg_t&             cfg,
+            srslte::radio_interface_phy* radio_,
+            stack_interface_phy_lte*     stack_);
+  void stop() override;
+
+  std::string get_type() override { return "lte"; };
+
   /* MAC->PHY interface */
-  int  add_rnti(uint16_t rnti);
-  void rem_rnti(uint16_t rnti);
+  int  add_rnti(uint16_t rnti, uint32_t pcell_index, bool is_temporal) override;
+  void rem_rnti(uint16_t rnti) final;
+  void set_mch_period_stop(uint32_t stop) final;
+  void set_activation_deactivation_scell(uint16_t                                     rnti,
+                                         const std::array<bool, SRSLTE_MAX_CARRIERS>& activation) override;
 
-  static uint32_t tti_to_SFN(uint32_t tti);
-  static uint32_t tti_to_subf(uint32_t tti);
-  
-  void start_plot();
-  void set_conf_dedicated_ack(uint16_t rnti, bool dedicated_ack);
-  void set_config_dedicated(uint16_t rnti, LIBLTE_RRC_PHYSICAL_CONFIG_DEDICATED_STRUCT* dedicated);
-  
-  void get_metrics(phy_metrics_t metrics[ENB_METRICS_MAX_USERS]);
-  
+  /*RRC-PHY interface*/
+  void configure_mbsfn(asn1::rrc::sib_type2_s*      sib2,
+                       asn1::rrc::sib_type13_r9_s*  sib13,
+                       const asn1::rrc::mcch_msg_s& mcch) override;
+
+  void start_plot() override;
+  void set_config_dedicated(uint16_t rnti, const phy_rrc_dedicated_list_t& dedicated_list) override;
+  void complete_config_dedicated(uint16_t rnti) override;
+
+  void get_metrics(phy_metrics_t metrics[ENB_METRICS_MAX_USERS]) override;
+
+  void radio_overflow() override{};
+  void radio_failure() override{};
+
 private:
-    
-  uint32_t nof_workers; 
-  
-  const static int MAX_WORKERS         = 4;
-  const static int DEFAULT_WORKERS     = 2;
-  
-  const static int PRACH_WORKER_THREAD_PRIO = 80; 
-  const static int SF_RECV_THREAD_PRIO = 1;
-  const static int WORKERS_THREAD_PRIO = 0; 
-  
-  srslte::radio         *radio_handler;
+  phy_rrc_cfg_t phy_rrc_config = {};
+  uint32_t      nof_workers    = 0;
 
-  srslte::thread_pool      workers_pool;
-  std::vector<phch_worker> workers;
-  phch_common              workers_common; 
-  prach_worker             prach; 
-  txrx                     tx_rx; 
-  
-  srslte_prach_cfg_t prach_cfg; 
-  
-  void parse_config(phy_cfg_t* cfg);
-  
+  const static int MAX_WORKERS = 4;
+
+  const static int PRACH_WORKER_THREAD_PRIO = 3;
+  const static int SF_RECV_THREAD_PRIO      = 1;
+  const static int WORKERS_THREAD_PRIO      = 2;
+
+  srslte::radio_interface_phy* radio = nullptr;
+
+  srslte::logger*                                   logger = nullptr;
+  std::vector<std::unique_ptr<srslte::log_filter> > log_vec;
+  srslte::log*                                      log_h = nullptr;
+
+  srslte::thread_pool    workers_pool;
+  std::vector<sf_worker> workers;
+  phy_common             workers_common;
+  prach_worker_pool      prach;
+  txrx                   tx_rx;
+
+  bool initialized = false;
+
+  srslte_prach_cfg_t prach_cfg = {};
+
+  void parse_common_config(const phy_cfg_t& cfg);
 };
 
 } // namespace srsenb
 
-#endif // UEPHY_H
+#endif // SRSENB_PHY_H

@@ -1,12 +1,7 @@
-/**
+/*
+ * Copyright 2013-2020 Software Radio Systems Limited
  *
- * \section COPYRIGHT
- *
- * Copyright 2013-2015 Software Radio Systems Limited
- *
- * \section LICENSE
- *
- * This file is part of the srsLTE library.
+ * This file is part of srsLTE.
  *
  * srsLTE is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Affero General Public License as
@@ -28,28 +23,22 @@
  *  File:         mod.h
  *
  *  Description:  Modulation.
- *                Supports BPSK, QPSK, 16QAM and 64QAM.
+ *                Supports BPSK, QPSK, 16QAM, 64QAM and 256QAM.
  *
  *  Reference:    3GPP TS 36.211 version 10.0.0 Release 10 Sec. 7.1
  *****************************************************************************/
 
-#ifndef MOD_
-#define MOD_
+#ifndef SRSLTE_MOD_H
+#define SRSLTE_MOD_H
 
-#include <complex.h>
 #include <stdint.h>
 
-#include "srslte/config.h"
 #include "modem_table.h"
+#include "srslte/config.h"
 
-SRSLTE_API int srslte_mod_modulate(srslte_modem_table_t* table,
-                                   uint8_t *bits, 
-                                   cf_t* symbols, 
-                                   uint32_t nbits);
+SRSLTE_API int srslte_mod_modulate(const srslte_modem_table_t* table, uint8_t* bits, cf_t* symbols, uint32_t nbits);
 
-SRSLTE_API int srslte_mod_modulate_bytes(srslte_modem_table_t* q, 
-                                         uint8_t *bits, 
-                                         cf_t* symbols, 
-                                         uint32_t nbits); 
+SRSLTE_API int
+srslte_mod_modulate_bytes(const srslte_modem_table_t* q, const uint8_t* bits, cf_t* symbols, uint32_t nbits);
 
-#endif // MOD_
+#endif // SRSLTE_MOD_H

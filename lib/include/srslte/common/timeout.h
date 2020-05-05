@@ -1,19 +1,14 @@
-/**
+/*
+ * Copyright 2013-2020 Software Radio Systems Limited
  *
- * \section COPYRIGHT
+ * This file is part of srsLTE.
  *
- * Copyright 2013-2015 Software Radio Systems Limited
- *
- * \section LICENSE
- *
- * This file is part of the srsUE library.
- *
- * srsUE is free software: you can redistribute it and/or modify
+ * srsLTE is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Affero General Public License as
  * published by the Free Software Foundation, either version 3 of
  * the License, or (at your option) any later version.
  *
- * srsUE is distributed in the hope that it will be useful,
+ * srsLTE is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU Affero General Public License for more details.
@@ -31,35 +26,35 @@
  *  Reference:
  *****************************************************************************/
 
-#ifndef TIMEOUT_H
-#define TIMEOUT_H
+#ifndef SRSLTE_TIMEOUT_H
+#define SRSLTE_TIMEOUT_H
 
-#include <stdint.h>
-#include <pthread.h>
-#include <unistd.h>
-#include <sys/time.h>
 #include "srslte/srslte.h"
+#include <pthread.h>
+#include <stdint.h>
+#include <sys/time.h>
+#include <unistd.h>
 
 namespace srslte {
-  
+
 class timeout_callback
 {
-  public: 
-    virtual void timeout_expired(uint32_t timeout_id) = 0;
-}; 
-  
+public:
+  virtual void timeout_expired(uint32_t timeout_id) = 0;
+};
+
 class timeout
 {
 public:
-  timeout():running(false),callback(NULL), thread(0), timeout_id(0) {}
+  timeout() : running(false), callback(NULL), thread(0), timeout_id(0) {}
   ~timeout()
   {
-    if(running && callback)
+    if (running && callback)
       pthread_join(thread, NULL);
   }
-  void start(int duration_msec_, uint32_t timeout_id_=0,timeout_callback *callback_=NULL)
+  void start(int duration_msec_, uint32_t timeout_id_ = 0, timeout_callback* callback_ = NULL)
   {
-    if(duration_msec_ < 0)
+    if (duration_msec_ < 0)
       return;
     reset();
     gettimeofday(&start_time[1], NULL);
@@ -67,58 +62,63 @@ public:
     running       = true;
     timeout_id    = timeout_id_;
     callback      = callback_;
-    if(callback)
+    if (callback)
       pthread_create(&thread, NULL, &thread_start, this);
   }
   void reset()
   {
-    if(callback)
+    if (callback)
       pthread_cancel(thread);
     running = false;
   }
-  static void* thread_start(void *t_)
+  static void* thread_start(void* t_)
   {
-    timeout *t = (timeout*)t_;
+    timeout* t = (timeout*)t_;
     t->thread_func();
-    return NULL; 
+    return NULL;
   }
   void thread_func()
   {
-   
     // substract time elapsed until now from timer duration
-    gettimeofday(&start_time[2], NULL); 
+    gettimeofday(&start_time[2], NULL);
     get_time_interval(start_time);
-    
-    int32_t usec = duration_msec*1000-start_time[0].tv_usec;
-    if(usec > 0)
+
+    int32_t usec = duration_msec * 1000 - start_time[0].tv_usec;
+    if (usec > 0)
       usleep(usec);
-    if(callback && running)
-        callback->timeout_expired(timeout_id);
+    if (callback && running)
+      callback->timeout_expired(timeout_id);
   }
   bool expired()
   {
-    if(running) {
-      gettimeofday(&start_time[2], NULL); 
-      get_time_interval(start_time);        
-      return start_time[0].tv_usec > duration_msec*1000;
+    if (running) {
+      gettimeofday(&start_time[2], NULL);
+      get_time_interval(start_time);
+      return start_time[0].tv_usec > duration_msec * 1000;
     } else {
       return false;
     }
   }
-  bool is_running()
+  int32_t get_msec_to_expire()
   {
-    return running;
+    if (running) {
+      gettimeofday(&start_time[2], NULL);
+      get_time_interval(start_time);
+      return (duration_msec * 1000 - start_time[0].tv_usec) / 1000;
+    }
+    return 0;
   }
+  bool is_running() { return running; }
 
 private:
-  struct timeval            start_time[3];
-  pthread_t                 thread;
-  uint32_t                  timeout_id;
-  timeout_callback         *callback;
-  bool                      running;
-  int duration_msec;
+  struct timeval    start_time[3];
+  pthread_t         thread;
+  uint32_t          timeout_id;
+  timeout_callback* callback;
+  bool              running;
+  int               duration_msec;
 };
 
-} // namespace srsue
-  
-#endif // TIMEOUT_H
+} // namespace srslte
+
+#endif // SRSLTE_TIMEOUT_H

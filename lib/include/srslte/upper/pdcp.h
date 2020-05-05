@@ -1,19 +1,14 @@
-/**
+/*
+ * Copyright 2013-2020 Software Radio Systems Limited
  *
- * \section COPYRIGHT
+ * This file is part of srsLTE.
  *
- * Copyright 2013-2015 Software Radio Systems Limited
- *
- * \section LICENSE
- *
- * This file is part of the srsUE library.
- *
- * srsUE is free software: you can redistribute it and/or modify
+ * srsLTE is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Affero General Public License as
  * published by the Free Software Foundation, either version 3 of
  * the License, or (at your option) any later version.
  *
- * srsUE is distributed in the hope that it will be useful,
+ * srsLTE is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU Affero General Public License for more details.
@@ -24,72 +19,67 @@
  *
  */
 
-#ifndef PDCP_H
-#define PDCP_H
+#ifndef SRSLTE_PDCP_H
+#define SRSLTE_PDCP_H
 
-#include "srslte/common/log.h"
 #include "srslte/common/common.h"
+#include "srslte/common/log.h"
 #include "srslte/interfaces/ue_interfaces.h"
-#include "srslte/upper/pdcp_entity.h"
+#include "srslte/upper/pdcp_entity_lte.h"
 
 namespace srslte {
 
-class pdcp
-    :public srsue::pdcp_interface_gw
-    ,public srsue::pdcp_interface_rlc
-    ,public srsue::pdcp_interface_rrc
+class pdcp : public srsue::pdcp_interface_rlc, public srsue::pdcp_interface_rrc
 {
 public:
-  pdcp();
-  virtual ~pdcp(){}
-  void init(srsue::rlc_interface_pdcp *rlc_,
-            srsue::rrc_interface_pdcp *rrc_,
-            srsue::gw_interface_pdcp *gw_,
-            log *pdcp_log_,
-            uint32_t lcid_,
-            uint8_t direction_);
+  pdcp(srslte::task_handler_interface* task_executor_, const char* logname);
+  virtual ~pdcp();
+  void init(srsue::rlc_interface_pdcp* rlc_, srsue::rrc_interface_pdcp* rrc_, srsue::gw_interface_pdcp* gw_);
   void stop();
 
   // GW interface
-  bool is_drb_enabled(uint32_t lcid);
+  bool is_lcid_enabled(uint32_t lcid);
 
   // RRC interface
   void reestablish();
+  void reestablish(uint32_t lcid);
   void reset();
-  void write_sdu(uint32_t lcid, byte_buffer_t *sdu);
-  void add_bearer(uint32_t lcid, srslte_pdcp_config_t cnfg = srslte_pdcp_config_t());
-  void config_security(uint32_t lcid,
-                       uint8_t *k_enc,
-                       uint8_t *k_int,
-                       CIPHERING_ALGORITHM_ID_ENUM cipher_algo,
-                       INTEGRITY_ALGORITHM_ID_ENUM integ_algo);
-  void config_security_all(uint8_t *k_enc,
-                           uint8_t *k_int,
-                           CIPHERING_ALGORITHM_ID_ENUM cipher_algo,
-                           INTEGRITY_ALGORITHM_ID_ENUM integ_algo);
-  void enable_integrity(uint32_t lcid);
-  void enable_encryption(uint32_t lcid);
+  void write_sdu(uint32_t lcid, unique_byte_buffer_t sdu, bool blocking);
+  void write_sdu_mch(uint32_t lcid, unique_byte_buffer_t sdu);
+  void add_bearer(uint32_t lcid, pdcp_config_t cnfg);
+  void add_bearer_mrb(uint32_t lcid, pdcp_config_t cnfg);
+  void del_bearer(uint32_t lcid);
+  void change_lcid(uint32_t old_lcid, uint32_t new_lcid);
+  void config_security(uint32_t lcid, as_security_config_t sec_cfg);
+  void config_security_all(as_security_config_t sec_cfg);
+  void enable_integrity(uint32_t lcid, srslte_direction_t direction);
+  void enable_encryption(uint32_t lcid, srslte_direction_t direction);
+  void enable_security_timed(uint32_t lcid, srslte_direction_t direction, uint32_t sn);
+  bool get_bearer_status(uint32_t lcid, uint16_t* dlsn, uint16_t* dlhfn, uint16_t* ulsn, uint16_t* ulhfn);
 
   // RLC interface
-  void write_pdu(uint32_t lcid, byte_buffer_t *sdu);
-  void write_pdu_bcch_bch(byte_buffer_t *sdu);
-  void write_pdu_bcch_dlsch(byte_buffer_t *sdu);
-  void write_pdu_pcch(byte_buffer_t *sdu);
+  void write_pdu(uint32_t lcid, unique_byte_buffer_t sdu);
+  void write_pdu_mch(uint32_t lcid, unique_byte_buffer_t sdu);
+  void write_pdu_bcch_bch(unique_byte_buffer_t sdu);
+  void write_pdu_bcch_dlsch(unique_byte_buffer_t sdu);
+  void write_pdu_pcch(unique_byte_buffer_t sdu);
 
 private:
-  srsue::rlc_interface_pdcp *rlc;
-  srsue::rrc_interface_pdcp *rrc;
-  srsue::gw_interface_pdcp  *gw;
+  srsue::rlc_interface_pdcp*      rlc           = nullptr;
+  srsue::rrc_interface_pdcp*      rrc           = nullptr;
+  srsue::gw_interface_pdcp*       gw            = nullptr;
+  srslte::task_handler_interface* task_executor = nullptr;
+  srslte::log_ref                 pdcp_log;
 
-  log                       *pdcp_log;
-  pdcp_entity                pdcp_array[SRSLTE_N_RADIO_BEARERS];
-  uint32_t                   lcid; // default LCID that is maintained active by PDCP instance
-  uint8_t                    direction;
+  std::map<uint16_t, std::unique_ptr<pdcp_entity_lte> > pdcp_array, pdcp_array_mrb;
+
+  // cache valid lcids to be checked from separate thread
+  std::mutex         cache_mutex;
+  std::set<uint32_t> valid_lcids_cached;
 
   bool valid_lcid(uint32_t lcid);
+  bool valid_mch_lcid(uint32_t lcid);
 };
 
-} // namespace srsue
-
-
-#endif // PDCP_H
+} // namespace srslte
+#endif // SRSLTE_PDCP_H

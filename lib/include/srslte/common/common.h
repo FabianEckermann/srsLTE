@@ -1,19 +1,14 @@
-/**
+/*
+ * Copyright 2013-2020 Software Radio Systems Limited
  *
- * \section COPYRIGHT
+ * This file is part of srsLTE.
  *
- * Copyright 2013-2015 Software Radio Systems Limited
- *
- * \section LICENSE
- *
- * This file is part of the srsUE library.
- *
- * srsUE is free software: you can redistribute it and/or modify
+ * srsLTE is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Affero General Public License as
  * published by the Free Software Foundation, either version 3 of
  * the License, or (at your option) any later version.
  *
- * srsUE is distributed in the hope that it will be useful,
+ * srsLTE is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU Affero General Public License for more details.
@@ -24,13 +19,14 @@
  *
  */
 
-#ifndef COMMON_H
-#define COMMON_H
+#ifndef SRSLTE_COMMON_H
+#define SRSLTE_COMMON_H
 
 /*******************************************************************************
                               INCLUDES
 *******************************************************************************/
 
+#include <memory>
 #include <stdint.h>
 #include <string.h>
 
@@ -38,38 +34,49 @@
                               DEFINES
 *******************************************************************************/
 
-#define SRSLTE_UE_CATEGORY     4
+#define SRSLTE_UE_CATEGORY 4
 
-#define SRSLTE_N_SRB           3
-#define SRSLTE_N_DRB           8
+#define SRSLTE_N_SRB 3
+#define SRSLTE_N_DRB 8
 #define SRSLTE_N_RADIO_BEARERS 11
 
-#define HARQ_DELAY_MS   4
-#define MSG3_DELAY_MS   2 // Delay added to HARQ_DELAY_MS
-#define TTI_RX(tti)     (tti>HARQ_DELAY_MS?((tti-HARQ_DELAY_MS)%10240):(10240+tti-HARQ_DELAY_MS))
-#define TTI_TX(tti)     ((tti+HARQ_DELAY_MS)%10240)
-#define TTI_RX_ACK(tti) ((tti+(2*HARQ_DELAY_MS))%10240)
+#define SRSLTE_N_MCH_LCIDS 32
 
-#define UL_PIDOF(tti)   (tti%(2*HARQ_DELAY_MS))
+#define FDD_HARQ_DELAY_DL_MS 4
+#define FDD_HARQ_DELAY_UL_MS 4
+#define MSG3_DELAY_MS 2 // Delay added to FDD_HARQ_DELAY_DL_MS
 
-#define TTIMOD_SZ       (((2*HARQ_DELAY_MS) < 10)?10:20)
-#define TTIMOD(tti)     (tti%TTIMOD_SZ)
+#define TTI_SUB(a, b) ((((a) + 10240) - (b)) % 10240)
+#define TTI_ADD(a, b) (((a) + (b)) % 10240)
 
-#define ASYNC_DL_SCHED  (HARQ_DELAY_MS <= 4)
+#define TTI_TX(tti) TTI_ADD(tti, FDD_HARQ_DELAY_DL_MS)
 
-// Cat 3 UE - Max number of DL-SCH transport block bits received within a TTI
-// 3GPP 36.306 Table 4.1.1
-#define SRSLTE_MAX_BUFFER_SIZE_BITS  102048
-#define SRSLTE_MAX_BUFFER_SIZE_BYTES 12756
-#define SRSLTE_BUFFER_HEADER_OFFSET  1024
+#define TTI_RX(tti) (TTI_SUB(tti, FDD_HARQ_DELAY_UL_MS))
+#define TTI_RX_ACK(tti) (TTI_ADD(tti, FDD_HARQ_DELAY_UL_MS + FDD_HARQ_DELAY_DL_MS))
+
+#define TTIMOD_SZ 20
+#define TTIMOD(tti) (tti % TTIMOD_SZ)
+
+#define PHICH_MAX_SF 6 // Maximum PHICH in a subframe (1 in FDD, > 1 in TDD, see table 9.1.2-1 36.213)
+
+#define ASYNC_DL_SCHED (FDD_HARQ_DELAY_UL_MS <= 4)
+
+// Cat 4 UE - Max number of DL-SCH transport block bits received within a TTI
+// 3GPP 36.306 v15.4.0 Table 4.1.1 for Category 11 with 2 layers and 256QAM
+#define SRSLTE_MAX_TBSIZE_BITS 97896
+#define SRSLTE_BUFFER_HEADER_OFFSET 1020
+#define SRSLTE_MAX_BUFFER_SIZE_BITS (SRSLTE_MAX_TBSIZE_BITS + SRSLTE_BUFFER_HEADER_OFFSET)
+#define SRSLTE_MAX_BUFFER_SIZE_BYTES (SRSLTE_MAX_TBSIZE_BITS / 8 + SRSLTE_BUFFER_HEADER_OFFSET)
 
 //#define SRSLTE_BUFFER_POOL_LOG_ENABLED
 
 #ifdef SRSLTE_BUFFER_POOL_LOG_ENABLED
-#define pool_allocate (pool->allocate(__FUNCTION__))
+#define pool_allocate (srslte::allocate_unique_buffer(*pool, __PRETTY_FUNCTION__))
+#define pool_allocate_blocking (srslte::allocate_unique_buffer(*pool, __PRETTY_FUNCTION__, true))
 #define SRSLTE_BUFFER_POOL_LOG_NAME_LEN 128
 #else
-#define pool_allocate (pool->allocate())
+#define pool_allocate (srslte::allocate_unique_buffer(*pool))
+#define pool_allocate_blocking (srslte::allocate_unique_buffer(*pool, true))
 #endif
 
 #include "srslte/srslte.h"
@@ -80,21 +87,7 @@
 
 namespace srslte {
 
-typedef enum{
-  ERROR_NONE = 0,
-  ERROR_INVALID_PARAMS,
-  ERROR_INVALID_COMMAND,
-  ERROR_OUT_OF_BOUNDS,
-  ERROR_CANT_START,
-  ERROR_ALREADY_STARTED,
-  ERROR_N_ITEMS,
-}error_t;
-static const char error_text[ERROR_N_ITEMS][20] = { "None",
-                                                    "Invalid parameters",
-                                                    "Invalid command",
-                                                    "Out of bounds",
-                                                    "Can't start",
-                                                    "Already started"};
+//#define ENABLE_TIMESTAMP
 
 /******************************************************************************
  * Byte and Bit buffers
@@ -103,135 +96,174 @@ static const char error_text[ERROR_N_ITEMS][20] = { "None",
  * copy constructors & assignment operators for quick copying. Byte buffer
  * holds a next pointer to support linked lists.
  *****************************************************************************/
-class byte_buffer_t{
+class byte_buffer_t
+{
 public:
-    uint32_t    N_bytes;
-    uint8_t     buffer[SRSLTE_MAX_BUFFER_SIZE_BYTES];
-    uint8_t    *msg;
+  uint32_t N_bytes;
+  uint8_t  buffer[SRSLTE_MAX_BUFFER_SIZE_BYTES];
+  uint8_t* msg;
 #ifdef SRSLTE_BUFFER_POOL_LOG_ENABLED
-    char        debug_name[SRSLTE_BUFFER_POOL_LOG_NAME_LEN];
+  char debug_name[SRSLTE_BUFFER_POOL_LOG_NAME_LEN];
 #endif
 
-    byte_buffer_t():N_bytes(0)
-    {
-      timestamp_is_set = false; 
-      msg  = &buffer[SRSLTE_BUFFER_HEADER_OFFSET];
-      next = NULL; 
-#ifdef SRSLTE_BUFFER_POOL_LOG_ENABLED
-      debug_name[0] = 0;
+  byte_buffer_t() : N_bytes(0)
+  {
+    bzero(buffer, SRSLTE_MAX_BUFFER_SIZE_BYTES);
+#ifdef ENABLE_TIMESTAMP
+    timestamp_is_set = false;
 #endif
-    }
-    byte_buffer_t(const byte_buffer_t& buf)
-    {
-      N_bytes = buf.N_bytes;
-      memcpy(msg, buf.msg, N_bytes);
-    }
-    byte_buffer_t & operator= (const byte_buffer_t & buf)
-    {
-      // avoid self assignment
-      if (&buf == this)
-        return *this;
-      N_bytes = buf.N_bytes;
-      memcpy(msg, buf.msg, N_bytes);
+    msg  = &buffer[SRSLTE_BUFFER_HEADER_OFFSET];
+    next = NULL;
+#ifdef SRSLTE_BUFFER_POOL_LOG_ENABLED
+    bzero(debug_name, SRSLTE_BUFFER_POOL_LOG_NAME_LEN);
+#endif
+  }
+  byte_buffer_t(const byte_buffer_t& buf)
+  {
+    bzero(buffer, SRSLTE_MAX_BUFFER_SIZE_BYTES);
+    msg  = &buffer[SRSLTE_BUFFER_HEADER_OFFSET];
+    next = NULL;
+    // copy actual contents
+    N_bytes = buf.N_bytes;
+    memcpy(msg, buf.msg, N_bytes);
+  }
+  byte_buffer_t& operator=(const byte_buffer_t& buf)
+  {
+    // avoid self assignment
+    if (&buf == this)
       return *this;
-    }
-    void reset()
-    {
-      msg       = &buffer[SRSLTE_BUFFER_HEADER_OFFSET];
-      N_bytes   = 0;
-      timestamp_is_set = false; 
-    }
-    uint32_t get_headroom()
-    {
-      return msg-buffer;
-    }
-    long get_latency_us()
-    {
-      if(!timestamp_is_set)
-        return 0;
-      gettimeofday(&timestamp[2], NULL); 
-      get_time_interval(timestamp);
-      return timestamp[0].tv_usec;
-    }
-    
-    void set_timestamp() 
-    {
-      gettimeofday(&timestamp[1], NULL); 
-      timestamp_is_set = true; 
-    }
-
-private:
-  
-  
-  void get_time_interval(struct timeval * tdata) {
-
-    tdata[0].tv_sec = tdata[2].tv_sec - tdata[1].tv_sec;
-    tdata[0].tv_usec = tdata[2].tv_usec - tdata[1].tv_usec;
-    if (tdata[0].tv_usec < 0) {
-      tdata[0].tv_sec--;
-      tdata[0].tv_usec += 1000000;
-    }
+    bzero(buffer, SRSLTE_MAX_BUFFER_SIZE_BYTES);
+    msg     = &buffer[SRSLTE_BUFFER_HEADER_OFFSET];
+    next    = NULL;
+    N_bytes = buf.N_bytes;
+    memcpy(msg, buf.msg, N_bytes);
+    return *this;
+  }
+  void clear()
+  {
+    msg     = &buffer[SRSLTE_BUFFER_HEADER_OFFSET];
+    N_bytes = 0;
+#ifdef ENABLE_TIMESTAMP
+    timestamp_is_set = false;
+#endif
+  }
+  uint32_t get_headroom() { return msg - buffer; }
+  // Returns the remaining space from what is reported to be the length of msg
+  uint32_t get_tailroom() { return (sizeof(buffer) - (msg - buffer) - N_bytes); }
+  long     get_latency_us()
+  {
+#ifdef ENABLE_TIMESTAMP
+    if (!timestamp_is_set)
+      return 0;
+    gettimeofday(&timestamp[2], NULL);
+    get_time_interval(timestamp);
+    return timestamp[0].tv_usec;
+#else
+    return 0;
+#endif
   }
 
-  
-    struct timeval timestamp[3];
-    bool           timestamp_is_set; 
-    byte_buffer_t *next;
+  void set_timestamp()
+  {
+#ifdef ENABLE_TIMESTAMP
+    gettimeofday(&timestamp[1], NULL);
+    timestamp_is_set = true;
+#endif
+  }
+
+  void append_bytes(uint8_t* buf, uint32_t size)
+  {
+    memcpy(&msg[N_bytes], buf, size);
+    N_bytes += size;
+  }
+
+private:
+#ifdef ENABLE_TIMESTAMP
+  struct timeval timestamp[3];
+  bool           timestamp_is_set;
+#endif
+  byte_buffer_t* next;
 };
 
-struct bit_buffer_t{
-    uint32_t    N_bits;
-    uint8_t     buffer[SRSLTE_MAX_BUFFER_SIZE_BITS];
-    uint8_t    *msg;
+struct bit_buffer_t {
+  uint32_t N_bits;
+  uint8_t  buffer[SRSLTE_MAX_BUFFER_SIZE_BITS];
+  uint8_t* msg;
 #ifdef SRSLTE_BUFFER_POOL_LOG_ENABLED
-    char        debug_name[128];
+  char debug_name[128];
 #endif
 
-    bit_buffer_t():N_bits(0)
-    {
-      msg = &buffer[SRSLTE_BUFFER_HEADER_OFFSET];
-    }
-    bit_buffer_t(const bit_buffer_t& buf){
-      N_bits = buf.N_bits;
-      memcpy(msg, buf.msg, N_bits);
-    }
-    bit_buffer_t & operator= (const bit_buffer_t & buf){
-      // avoid self assignment
-      if (&buf == this)
-        return *this;
-      N_bits = buf.N_bits;
-      memcpy(msg, buf.msg, N_bits);
+  bit_buffer_t() : N_bits(0)
+  {
+    msg = &buffer[SRSLTE_BUFFER_HEADER_OFFSET];
+#ifdef ENABLE_TIMESTAMP
+    timestamp_is_set = false;
+#endif
+  }
+  bit_buffer_t(const bit_buffer_t& buf)
+  {
+    msg    = &buffer[SRSLTE_BUFFER_HEADER_OFFSET];
+    N_bits = buf.N_bits;
+    memcpy(msg, buf.msg, N_bits);
+  }
+  bit_buffer_t& operator=(const bit_buffer_t& buf)
+  {
+    // avoid self assignment
+    if (&buf == this) {
       return *this;
     }
-    void reset()
-    {
-      msg       = &buffer[SRSLTE_BUFFER_HEADER_OFFSET];
-      N_bits    = 0;
-      timestamp_is_set = false; 
-    }
-    uint32_t get_headroom()
-    {
-      return msg-buffer;
-    }
-    long get_latency_us()
-    {
-      if(!timestamp_is_set)
-        return 0;
-      gettimeofday(&timestamp[2], NULL); 
-      return timestamp[0].tv_usec;
-    }
-    void set_timestamp() 
-    {
-      gettimeofday(&timestamp[1], NULL); 
-      timestamp_is_set = true; 
-    }
+    msg    = &buffer[SRSLTE_BUFFER_HEADER_OFFSET];
+    N_bits = buf.N_bits;
+    memcpy(msg, buf.msg, N_bits);
+    return *this;
+  }
+  void clear()
+  {
+    msg    = &buffer[SRSLTE_BUFFER_HEADER_OFFSET];
+    N_bits = 0;
+#ifdef ENABLE_TIMESTAMP
+    timestamp_is_set = false;
+#endif
+  }
+  uint32_t get_headroom() { return msg - buffer; }
+  long     get_latency_us()
+  {
+#ifdef ENABLE_TIMESTAMP
+    if (!timestamp_is_set)
+      return 0;
+    gettimeofday(&timestamp[2], NULL);
+    return timestamp[0].tv_usec;
+#else
+    return 0;
+#endif
+  }
+  void set_timestamp()
+  {
+#ifdef ENABLE_TIMESTAMP
+    gettimeofday(&timestamp[1], NULL);
+    timestamp_is_set = true;
+#endif
+  }
 
-private: 
-    struct timeval timestamp[3];
-    bool           timestamp_is_set; 
-
+private:
+#ifdef ENABLE_TIMESTAMP
+  struct timeval timestamp[3];
+  bool           timestamp_is_set;
+#endif
 };
 
-} // namespace srsue
+// Create a Managed Life-Time Byte Buffer
+class byte_buffer_pool;
+class byte_buffer_deleter
+{
+public:
+  explicit byte_buffer_deleter(byte_buffer_pool* pool_ = nullptr) : pool(pool_) {}
+  void              operator()(byte_buffer_t* buf) const;
+  byte_buffer_pool* pool;
+};
 
-#endif // COMMON_H
+typedef std::unique_ptr<byte_buffer_t, byte_buffer_deleter> unique_byte_buffer_t;
+
+} // namespace srslte
+
+#endif // SRSLTE_COMMON_H

@@ -1,12 +1,7 @@
-/**
+/*
+ * Copyright 2013-2020 Software Radio Systems Limited
  *
- * \section COPYRIGHT
- *
- * Copyright 2013-2015 Software Radio Systems Limited
- *
- * \section LICENSE
- *
- * This file is part of the srsLTE library.
+ * This file is part of srsLTE.
  *
  * srsLTE is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Affero General Public License as
@@ -24,38 +19,49 @@
  *
  */
 
-#ifndef CONFIG_H
-#define CONFIG_H
+#ifndef SRSLTE_CONFIG_H
+#define SRSLTE_CONFIG_H
 
 // Generic helper definitions for shared library support
 #if defined _WIN32 || defined __CYGWIN__
-  #define SRSLTE_IMPORT __declspec(dllimport)
-  #define SRSLTE_EXPORT __declspec(dllexport)
-  #define SRSLTE_LOCAL
+#define SRSLTE_IMPORT __declspec(dllimport)
+#define SRSLTE_EXPORT __declspec(dllexport)
+#define SRSLTE_LOCAL
 #else
-  #if __GNUC__ >= 4
-    #define SRSLTE_IMPORT __attribute__ ((visibility ("default")))
-    #define SRSLTE_EXPORT __attribute__ ((visibility ("default")))
-  #else
-    #define SRSLTE_IMPORT
-    #define SRSLTE_EXPORT
-    #define SRSLTE_LOCAL
-  #endif
+#if __GNUC__ >= 4
+#define SRSLTE_IMPORT __attribute__((visibility("default")))
+#define SRSLTE_EXPORT __attribute__((visibility("default")))
+#else
+#define SRSLTE_IMPORT
+#define SRSLTE_EXPORT
+#define SRSLTE_LOCAL
+#endif
 #endif
 
 // Define SRSLTE_API
 // SRSLTE_API is used for the public API symbols.
 #ifdef SRSLTE_DLL_EXPORTS // defined if we are building the SRSLTE DLL (instead of using it)
-  #define SRSLTE_API SRSLTE_EXPORT
+#define SRSLTE_API SRSLTE_EXPORT
 #else
-  #define SRSLTE_API SRSLTE_IMPORT
+#define SRSLTE_API SRSLTE_IMPORT
 #endif
 
+// Useful macros for templates
+#define CONCAT(a, b) a##b
+#define CONCAT2(a, b) CONCAT(a, b)
+
+#define STRING2(x) #x
+#define STRING(x) STRING2(x)
 
 // Common error codes
-#define SRSLTE_SUCCESS                0
-#define SRSLTE_ERROR                  -1
-#define SRSLTE_ERROR_INVALID_INPUTS   -2
+#define SRSLTE_SUCCESS 0
+#define SRSLTE_ERROR -1
+#define SRSLTE_ERROR_INVALID_INPUTS -2
+#define SRSLTE_ERROR_TIMEOUT -3
+#define SRSLTE_ERROR_INVALID_COMMAND -4
+#define SRSLTE_ERROR_OUT_OF_BOUNDS -5
+#define SRSLTE_ERROR_CANT_START -6
+#define SRSLTE_ERROR_ALREADY_STARTED -7
 
 // cf_t definition
 typedef _Complex float cf_t;
@@ -64,4 +70,4 @@ typedef _Complex float cf_t;
 typedef _Complex short int c16_t;
 #endif /* ENABLE_C16 */
 
-#endif // CONFIG_H
+#endif // SRSLTE_CONFIG_H

@@ -1,12 +1,7 @@
-/**
+/*
+ * Copyright 2013-2020 Software Radio Systems Limited
  *
- * \section COPYRIGHT
- *
- * Copyright 2013-2015 Software Radio Systems Limited
- *
- * \section LICENSE
- *
- * This file is part of the srsLTE library.
+ * This file is part of srsLTE.
  *
  * srsLTE is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Affero General Public License as
@@ -33,8 +28,8 @@
  *  Reference:    3GPP TS 36.212 version 10.0.0 Release 10 Sec. 5.1.4.2
  *********************************************************************************************/
 
-#ifndef RM_CONV_
-#define RM_CONV_
+#ifndef SRSLTE_RM_CONV_H
+#define SRSLTE_RM_CONV_H
 
 #include "srslte/config.h"
 
@@ -45,22 +40,12 @@
 #ifndef SRSLTE_TX_NULL
 #define SRSLTE_TX_NULL 100
 #endif
-SRSLTE_API int srslte_rm_conv_tx(uint8_t *input, 
-                                 uint32_t in_len, 
-                                 uint8_t *output, 
-                                 uint32_t out_len);
+SRSLTE_API int srslte_rm_conv_tx(uint8_t* input, uint32_t in_len, uint8_t* output, uint32_t out_len);
 
-SRSLTE_API int srslte_rm_conv_rx(float *input, 
-                                 uint32_t in_len, 
-                                 float *output, 
-                                 uint32_t out_len);
+SRSLTE_API int srslte_rm_conv_rx(float* input, uint32_t in_len, float* output, uint32_t out_len);
 
+/************* FIX THIS. MOVE ALL PROCESSING TO INT16 AND HAVE ONLY 1 IMPLEMENTATION ******/
 
-/************* FIX THIS. MOVE ALL PROCESSING TO INT16 AND HAVE ONLY 1 IMPLEMENTATION ******/ 
+SRSLTE_API int srslte_rm_conv_rx_s(int16_t* input, uint32_t in_len, int16_t* output, uint32_t out_len);
 
-SRSLTE_API int srslte_rm_conv_rx_s(int16_t *input, 
-                                   uint32_t in_len, 
-                                   int16_t *output, 
-                                   uint32_t out_len);
-
-#endif
+#endif // SRSLTE_RM_CONV_H

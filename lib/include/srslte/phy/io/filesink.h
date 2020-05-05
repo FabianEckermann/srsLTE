@@ -1,12 +1,7 @@
-/**
+/*
+ * Copyright 2013-2020 Software Radio Systems Limited
  *
- * \section COPYRIGHT
- *
- * Copyright 2013-2015 Software Radio Systems Limited
- *
- * \section LICENSE
- *
- * This file is part of the srsLTE library.
+ * This file is part of srsLTE.
  *
  * srsLTE is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Affero General Public License as
@@ -34,10 +29,11 @@
  *  Reference:
  *****************************************************************************/
 
-#ifndef FILESINK_
-#define FILESINK_
+#ifndef SRSLTE_FILESINK_H
+#define SRSLTE_FILESINK_H
 
 #include <stdint.h>
+#include <stdio.h>
 #include <stdlib.h>
 
 #include "srslte/config.h"
@@ -45,23 +41,16 @@
 
 /* Low-level API */
 typedef struct SRSLTE_API {
-  FILE *f;
+  FILE*             f;
   srslte_datatype_t type;
 } srslte_filesink_t;
 
-SRSLTE_API int srslte_filesink_init(srslte_filesink_t *q, 
-                                    char *filename, 
-                                    srslte_datatype_t type);
+SRSLTE_API int srslte_filesink_init(srslte_filesink_t* q, char* filename, srslte_datatype_t type);
 
-SRSLTE_API void srslte_filesink_free(srslte_filesink_t *q);
+SRSLTE_API void srslte_filesink_free(srslte_filesink_t* q);
 
-SRSLTE_API int srslte_filesink_write(srslte_filesink_t *q, 
-                                     void *buffer, 
-                                     int nsamples);
+SRSLTE_API int srslte_filesink_write(srslte_filesink_t* q, void* buffer, int nsamples);
 
-SRSLTE_API int srslte_filesink_write_multi(srslte_filesink_t *q,
-                                           void **buffer,
-                                           int nsamples,
-                                           int nchannels);
+SRSLTE_API int srslte_filesink_write_multi(srslte_filesink_t* q, void** buffer, int nsamples, int nchannels);
 
-#endif // FILESINK_
+#endif // SRSLTE_FILESINK_H

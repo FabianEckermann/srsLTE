@@ -1,17 +1,14 @@
-/* \section COPYRIGHT
- *
- * Copyright 2013-2017 Software Radio Systems Limited
- *
- * \section LICENSE
+/*
+ * Copyright 2013-2020 Software Radio Systems Limited
  *
  * This file is part of srsLTE.
  *
- * srsUE is free software: you can redistribute it and/or modify
+ * srsLTE is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Affero General Public License as
  * published by the Free Software Foundation, either version 3 of
  * the License, or (at your option) any later version.
  *
- * srsUE is distributed in the hope that it will be useful,
+ * srsLTE is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU Affero General Public License for more details.
@@ -21,14 +18,13 @@
  * and at http://www.gnu.org/licenses/.
  *
  */
-#ifndef GTPC_V2_H
-#define GTPC_V2_H
+#ifndef SRSLTE_GTPC_H
+#define SRSLTE_GTPC_H
 
-#include <stdint.h>
 #include "srslte/asn1/gtpc_msg.h"
+#include <stdint.h>
 
-
-namespace srslte{
+namespace srslte {
 
 /*GTP-C Version*/
 const uint8_t GTPC_V2 = 2;
@@ -52,16 +48,14 @@ const uint8_t GTPC_V2 = 2;
  * n+2    |           Sequence            |
  * n+3    |            Spare              |
  ***************************************************************************/
-
-  typedef struct gtpc_header
-  {
-    uint8_t version;
-    bool piggyback;
-    bool teid_present;
-    uint8_t type;
-    uint64_t teid;
-    uint64_t sequence;
-  } gtpc_header_t;
+typedef struct gtpc_header {
+  uint8_t  version;
+  bool     piggyback;
+  bool     teid_present;
+  uint8_t  type;
+  uint64_t teid;
+  uint64_t sequence;
+} gtpc_header_t;
 
 /****************************************************************************
  * GTP-C v2 Payload
@@ -69,15 +63,18 @@ const uint8_t GTPC_V2 = 2;
  *
  * Union that hold the different structures for the possible message types.
  ***************************************************************************/
-
-typedef union gtpc_msg_choice
-{
-  struct gtpc_create_session_request create_session_request;
-  struct gtpc_create_session_response create_session_response;
-  struct gtpc_modify_bearer_request modify_bearer_request;
-  struct gtpc_modify_bearer_response modify_bearer_response;
-  struct gtpc_delete_session_request delete_session_request;
-  struct gtpc_delete_session_response delete_session_response;
+typedef union gtpc_msg_choice {
+  struct gtpc_create_session_request                        create_session_request;
+  struct gtpc_create_session_response                       create_session_response;
+  struct gtpc_modify_bearer_request                         modify_bearer_request;
+  struct gtpc_modify_bearer_response                        modify_bearer_response;
+  struct gtpc_release_access_bearers_request                release_access_bearers_request;
+  struct gtpc_release_access_bearers_response               release_access_bearers_response;
+  struct gtpc_delete_session_request                        delete_session_request;
+  struct gtpc_delete_session_response                       delete_session_response;
+  struct gtpc_downlink_data_notification                    downlink_data_notification;
+  struct gtpc_downlink_data_notification_acknowledge        downlink_data_notification_acknowledge;
+  struct gtpc_downlink_data_notification_failure_indication downlink_data_notification_failure_indication;
 } gtpc_msg_choice_t;
 
 /****************************************************************************
@@ -88,15 +85,9 @@ typedef union gtpc_msg_choice
  * of one GTP-C header and one union of structures, which can hold
  * all the possible GTP-C messages
  ***************************************************************************/
-
-typedef struct gtpc_pdu
-{
-  struct gtpc_header header;
+typedef struct gtpc_pdu {
+  struct gtpc_header    header;
   union gtpc_msg_choice choice;
 } gtpc_pdu_t;
-
-
-
-};
-
-#endif
+} // namespace srslte
+#endif // SRSLTE_GTPC_H

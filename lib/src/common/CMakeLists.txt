@@ -1,5 +1,5 @@
 #
-# Copyright 2013-2017 Software Radio Systems Limited
+# Copyright 2013-2020 Software Radio Systems Limited
 #
 # This file is part of srsLTE
 #
@@ -10,7 +10,7 @@
 #
 # srsLTE is distributed in the hope that it will be useful,
 # but WITHOUT ANY WARRANTY; without even the implied warranty of
-# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
 # GNU Affero General Public License for more details.
 #
 # A copy of the GNU Affero General Public License can be found in
@@ -18,13 +18,45 @@
 # and at http://www.gnu.org/licenses/.
 #
 
-file(GLOB CXX_SOURCES "*.cc")
-file(GLOB C_SOURCES "*.c")
 
-add_library(srslte_common STATIC ${C_SOURCES} ${CXX_SOURCES})
+set(SOURCES arch_select.cc
+            backtrace.c
+            buffer_pool.cc
+            crash_handler.c
+            gen_mch_tables.c
+            liblte_security.cc
+            log_filter.cc
+            logmap.cc
+            logger_file.cc
+            mac_pcap.cc
+            nas_pcap.cc
+            network_utils.cc
+            pcap.c
+            rlc_pcap.cc
+            s1ap_pcap.cc
+            security.cc
+            snow_3g.cc
+            thread_pool.cc
+            threads.c
+            tti_sync_cv.cc
+            time_prof.cc
+            version.c
+            zuc.cc)
+
+if (ENABLE_5GNR)
+  set(SOURCES ${SOURCES} mac_nr_pcap.cc)
+endif(ENABLE_5GNR)
+
+# Avoid warnings caused by libmbedtls about deprecated functions
+set_source_files_properties(security.cc PROPERTIES COMPILE_FLAGS -Wno-deprecated-declarations)
+
+add_library(srslte_common STATIC ${SOURCES})
 add_custom_target(gen_build_info COMMAND cmake -P ${CMAKE_BINARY_DIR}/SRSLTEbuildinfo.cmake)
 add_dependencies(srslte_common gen_build_info)
 
+add_executable(arch_select arch_select.cc)
+
 target_include_directories(srslte_common PUBLIC ${SEC_INCLUDE_DIRS})
-target_link_libraries(srslte_common ${SEC_LIBRARIES})
-install(TARGETS srslte_common DESTINATION ${LIBRARY_DIR})
+target_link_libraries(srslte_common srslte_phy ${SEC_LIBRARIES})
+
+add_subdirectory(test)

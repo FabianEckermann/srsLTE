@@ -1,19 +1,14 @@
-/**
- *
- * \section COPYRIGHT
- *
- * Copyright 2013-2017 Software Radio Systems Limited
- *
- * \section LICENSE
+/*
+ * Copyright 2013-2020 Software Radio Systems Limited
  *
  * This file is part of srsLTE.
  *
- * srsUE is free software: you can redistribute it and/or modify
+ * srsLTE is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Affero General Public License as
  * published by the Free Software Foundation, either version 3 of
  * the License, or (at your option) any later version.
  *
- * srsUE is distributed in the hope that it will be useful,
+ * srsLTE is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU Affero General Public License for more details.
@@ -24,73 +19,77 @@
  *
  */
 
-#ifndef INTERFACE_COMMON_H
-#define INTERFACE_COMMON_H
+#ifndef SRSLTE_INTERFACES_COMMON_H
+#define SRSLTE_INTERFACES_COMMON_H
 
-#include "srslte/common/timers.h"
+#include "srslte/common/multiqueue.h"
 #include "srslte/common/security.h"
-#include "srslte/asn1/liblte_rrc.h"
-
+#include "srslte/common/timers.h"
+#include <string>
 
 namespace srslte {
 
-class srslte_nas_config_t
-{
-public:
-  srslte_nas_config_t(uint32_t lcid_ = 0)
-    :lcid(lcid_)
-    {}
+typedef struct {
+  std::string phy_level     = "none";
+  std::string phy_lib_level = "none";
+  int         phy_hex_limit = -1;
+} phy_log_args_t;
 
-  uint32_t lcid;
-};
+typedef struct {
+  float min;
+  float max;
+} rf_args_band_t;
 
+// RF/radio args
+typedef struct {
+  std::string type;
+  std::string log_level;
+  float       dl_freq;
+  float       ul_freq;
+  float       freq_offset;
+  float       rx_gain;
+  float       tx_gain;
+  float       tx_max_power;
+  float       tx_gain_offset;
+  float       rx_gain_offset;
+  uint32_t    nof_carriers; // Number of RF channels
+  uint32_t    nof_antennas; // Number of antennas per RF channel
+  std::string device_name;
+  std::string device_args;
+  std::string time_adv_nsamples;
+  std::string continuous_tx;
+
+  std::array<rf_args_band_t, SRSLTE_MAX_CARRIERS> ch_rx_bands;
+  std::array<rf_args_band_t, SRSLTE_MAX_CARRIERS> ch_tx_bands;
+
+} rf_args_t;
 
 class srslte_gw_config_t
 {
 public:
-  srslte_gw_config_t(uint32_t lcid_ = 0)
-  :lcid(lcid_)
-  {}
+  explicit srslte_gw_config_t(uint32_t lcid_ = 0) : lcid(lcid_) {}
 
   uint32_t lcid;
-};
-
-
-class srslte_pdcp_config_t
-{
-public:
-  srslte_pdcp_config_t(bool is_control_ = false, bool is_data_ = false, uint8_t direction_ = SECURITY_DIRECTION_UPLINK)
-    :direction(direction_)
-    ,is_control(is_control_)
-    ,is_data(is_data_)
-    ,sn_len(12) {}
-
-  uint8_t  direction;
-  bool     is_control;
-  bool     is_data;
-  uint8_t  sn_len;
-
-  // TODO: Support the following configurations
-  // bool do_rohc;
-};
-
-class mac_interface_timers
-{
-public: 
-  /* Timer services with ms resolution. 
-   * timer_id must be lower than MAC_NOF_UPPER_TIMERS
-   */
-  virtual timers::timer* timer_get(uint32_t timer_id)  = 0;
-  virtual void           timer_release_id(uint32_t timer_id) = 0;
-  virtual uint32_t       timer_get_unique_id() = 0;
 };
 
 class read_pdu_interface
 {
 public:
-  virtual int read_pdu(uint32_t lcid, uint8_t *payload, uint32_t requested_bytes) = 0; 
+  virtual int read_pdu(uint32_t lcid, uint8_t* payload, uint32_t requested_bytes) = 0;
 };
 
-}
+// Generic Task Management + Timer interface for upper stack
+class task_handler_interface
+{
+public:
+  virtual srslte::timer_handler::unique_timer    get_unique_timer()                                               = 0;
+  virtual srslte::task_multiqueue::queue_handler make_task_queue()                                                = 0;
+  virtual void                                   defer_callback(uint32_t duration_ms, std::function<void()> func) = 0;
+  virtual void                                   defer_task(srslte::move_task_t func)                             = 0;
+  virtual void                                   enqueue_background_task(std::function<void(uint32_t)> task)      = 0;
+  virtual void                                   notify_background_task_result(srslte::move_task_t task)          = 0;
+};
 
-#endif
+} // namespace srslte
+
+#endif // SRSLTE_INTERFACES_COMMON_H

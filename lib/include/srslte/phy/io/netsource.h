@@ -1,12 +1,7 @@
-/**
+/*
+ * Copyright 2013-2020 Software Radio Systems Limited
  *
- * \section COPYRIGHT
- *
- * Copyright 2013-2015 Software Radio Systems Limited
- *
- * \section LICENSE
- *
- * This file is part of the srsLTE library.
+ * This file is part of srsLTE.
  *
  * srsLTE is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Affero General Public License as
@@ -33,46 +28,40 @@
  *  Reference:
  *****************************************************************************/
 
-#ifndef NETSOURCE_
-#define NETSOURCE_
+#ifndef SRSLTE_NETSOURCE_H
+#define SRSLTE_NETSOURCE_H
 
-#include <stdbool.h>
-#include <sys/socket.h>
 #include <netinet/in.h>
-#include <stdio.h>
+#include <stdbool.h>
 #include <stdint.h>
+#include <stdio.h>
 #include <stdlib.h>
+#include <sys/socket.h>
 
 #include "srslte/config.h"
 
-typedef enum {
-  SRSLTE_NETSOURCE_UDP, 
-  SRSLTE_NETSOURCE_TCP  
-} srslte_netsource_type_t; 
+typedef enum { SRSLTE_NETSOURCE_UDP, SRSLTE_NETSOURCE_TCP } srslte_netsource_type_t;
 
 /* Low-level API */
 typedef struct SRSLTE_API {
-  int sockfd;
-  int connfd; 
-  struct sockaddr_in servaddr;
-  srslte_netsource_type_t type; 
-  struct sockaddr_in cliaddr;  
-}srslte_netsource_t;
+  int                     sockfd;
+  int                     connfd;
+  struct sockaddr_in      servaddr;
+  srslte_netsource_type_t type;
+  struct sockaddr_in      cliaddr;
+} srslte_netsource_t;
 
-SRSLTE_API int srslte_netsource_init(srslte_netsource_t *q, 
-                                     const char *address,
-                                     uint16_t port,
-                                     srslte_netsource_type_t type);
+SRSLTE_API int
+srslte_netsource_init(srslte_netsource_t* q, const char* address, uint16_t port, srslte_netsource_type_t type);
 
-SRSLTE_API void srslte_netsource_free(srslte_netsource_t *q);
+SRSLTE_API void srslte_netsource_free(srslte_netsource_t* q);
 
-SRSLTE_API int srslte_netsource_set_nonblocking(srslte_netsource_t *q); 
+SRSLTE_API int srslte_netsource_set_nonblocking(srslte_netsource_t* q);
 
-SRSLTE_API int srslte_netsource_read(srslte_netsource_t *q, 
-                                     void *buffer, 
-                                     int nof_bytes);
+SRSLTE_API int srslte_netsource_read(srslte_netsource_t* q, void* buffer, int nof_bytes);
 
-SRSLTE_API int srslte_netsource_set_timeout(srslte_netsource_t *q, 
-                                            uint32_t microseconds); 
+SRSLTE_API int srslte_netsource_write(srslte_netsource_t* q, void* buffer, int nbytes);
 
-#endif // UDPSOURCE_
+SRSLTE_API int srslte_netsource_set_timeout(srslte_netsource_t* q, uint32_t microseconds);
+
+#endif // SRSLTE_NETSOURCE_H

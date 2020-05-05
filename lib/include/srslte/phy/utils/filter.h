@@ -1,12 +1,7 @@
-/**
+/*
+ * Copyright 2013-2020 Software Radio Systems Limited
  *
- * \section COPYRIGHT
- *
- * Copyright 2013-2015 Software Radio Systems Limited
- *
- * \section LICENSE
- *
- * This file is part of the srsLTE library.
+ * This file is part of srsLTE.
  *
  * srsLTE is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Affero General Public License as
@@ -32,29 +27,30 @@
  *  Reference:
  *****************************************************************************/
 
-#ifndef FILTER_H
-#define FILTER_H
-#include <stdlib.h>
-#include <stdio.h>
+#ifndef SRSLTE_FILTER_H
+#define SRSLTE_FILTER_H
+
 #include "srslte/config.h"
-#include <stdbool.h>
 #include "srslte/phy/utils/vector.h"
-typedef struct SRSLTE_API{
-    cf_t *filter_input;
-    cf_t *downsampled_input;
-    cf_t *filter_output;
-    bool is_decimator;
-    int factor;
-    int num_taps;
-    float *taps;
-    
-}srslte_filt_cc_t;
+#include <stdbool.h>
+#include <stdio.h>
+#include <stdlib.h>
+typedef struct SRSLTE_API {
+  cf_t*  filter_input;
+  cf_t*  downsampled_input;
+  cf_t*  filter_output;
+  bool   is_decimator;
+  int    factor;
+  int    num_taps;
+  float* taps;
 
-void srslte_filt_decim_cc_init(srslte_filt_cc_t *q, int factor, int order);
+} srslte_filt_cc_t;
 
-void srslte_filt_decim_cc_free(srslte_filt_cc_t *q);
+void srslte_filt_decim_cc_init(srslte_filt_cc_t* q, int factor, int order);
 
-void srslte_filt_decim_cc_execute(srslte_filt_cc_t *q, cf_t *input, cf_t *downsampled_input, cf_t *output, int size);
+void srslte_filt_decim_cc_free(srslte_filt_cc_t* q);
 
-void srslte_downsample_cc(cf_t *input, cf_t *output, int M, int size) ;
-#endif // FILTER_H
+void srslte_filt_decim_cc_execute(srslte_filt_cc_t* q, cf_t* input, cf_t* downsampled_input, cf_t* output, int size);
+
+void srslte_downsample_cc(cf_t* input, cf_t* output, int M, int size);
+#endif // SRSLTE_FILTER_H

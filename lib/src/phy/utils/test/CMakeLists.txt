@@ -1,5 +1,5 @@
 #
-# Copyright 2013-2017 Software Radio Systems Limited
+# Copyright 2013-2020 Software Radio Systems Limited
 #
 # This file is part of srsLTE
 #
@@ -10,7 +10,7 @@
 #
 # srsLTE is distributed in the hope that it will be useful,
 # but WITHOUT ANY WARRANTY; without even the implied warranty of
-# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
 # GNU Affero General Public License for more details.
 #
 # A copy of the GNU Affero General Public License can be found in
@@ -46,3 +46,12 @@ add_test(algebra_2x2_mmse_solver_test algebra_test -m)
 add_executable(vector_test vector_test.c)
 target_link_libraries(vector_test srslte_phy)
 add_test(vector_test vector_test)
+
+
+########################################################################
+
+add_executable(ringbuffer_test ring_buffer_test.c)
+target_link_libraries(ringbuffer_test srslte_phy)
+
+add_test(ringbuffer_tester ringbuffer_test)
+########################################################################

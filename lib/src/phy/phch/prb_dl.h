@@ -1,12 +1,7 @@
-/**
+/*
+ * Copyright 2013-2020 Software Radio Systems Limited
  *
- * \section COPYRIGHT
- *
- * Copyright 2013-2015 Software Radio Systems Limited
- *
- * \section LICENSE
- *
- * This file is part of the srsLTE library.
+ * This file is part of srsLTE.
  *
  * srsLTE is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Affero General Public License as
@@ -23,12 +18,14 @@
  * and at http://www.gnu.org/licenses/.
  *
  */
+#ifndef SRSLTE_PRB_DL_H_
+#define SRSLTE_PRB_DL_H_
 
 #include "srslte/config.h"
 
-void prb_cp_ref(cf_t **input, cf_t **output, int offset, int nof_refs,
-    int nof_intervals, bool advance_input);
-void prb_cp(cf_t **input, cf_t **output, int nof_prb);
-void prb_cp_half(cf_t **input, cf_t **output, int nof_prb);
-void prb_put_ref_(cf_t **input, cf_t **output, int offset, int nof_refs,
-    int nof_intervals);
+void prb_cp_ref(cf_t** input, cf_t** output, int offset, int nof_refs, int nof_intervals, bool advance_input);
+void prb_cp(cf_t** input, cf_t** output, int nof_prb);
+void prb_cp_half(cf_t** input, cf_t** output, int nof_prb);
+void prb_put_ref_(cf_t** input, cf_t** output, int offset, int nof_refs, int nof_intervals);
+
+#endif /* SRSLTE_PRB_DL_H_ */

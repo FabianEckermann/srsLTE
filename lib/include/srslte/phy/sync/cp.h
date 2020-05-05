@@ -1,12 +1,7 @@
-/**
+/*
+ * Copyright 2013-2020 Software Radio Systems Limited
  *
- * \section COPYRIGHT
- *
- * Copyright 2013-2015 Software Radio Systems Limited
- *
- * \section LICENSE
- *
- * This file is part of the srsLTE library.
+ * This file is part of srsLTE.
  *
  * srsLTE is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Affero General Public License as
@@ -24,35 +19,29 @@
  *
  */
 
-#ifndef CP_
-#define CP_
+#ifndef SRSLTE_CP_H
+#define SRSLTE_CP_H
 
-#include <stdint.h>
 #include <complex.h>
+#include <stdint.h>
 
 #include "srslte/config.h"
 
 typedef struct {
-  cf_t *corr;
+  cf_t*    corr;
   uint32_t symbol_sz;
   uint32_t max_symbol_sz;
 } srslte_cp_synch_t;
 
-SRSLTE_API int srslte_cp_synch_init(srslte_cp_synch_t *q, 
-                                    uint32_t symbol_sz);
+SRSLTE_API int srslte_cp_synch_init(srslte_cp_synch_t* q, uint32_t symbol_sz);
 
-SRSLTE_API void srslte_cp_synch_free(srslte_cp_synch_t *q);
+SRSLTE_API void srslte_cp_synch_free(srslte_cp_synch_t* q);
 
-SRSLTE_API int srslte_cp_synch_resize(srslte_cp_synch_t *q,
-                                      uint32_t symbol_sz);
+SRSLTE_API int srslte_cp_synch_resize(srslte_cp_synch_t* q, uint32_t symbol_sz);
 
-SRSLTE_API uint32_t srslte_cp_synch(srslte_cp_synch_t *q, 
-                                    const cf_t *input,
-                                    uint32_t max_offset, 
-                                    uint32_t nof_symbols, 
-                                    uint32_t cp_len);
+SRSLTE_API uint32_t
+           srslte_cp_synch(srslte_cp_synch_t* q, const cf_t* input, uint32_t max_offset, uint32_t nof_symbols, uint32_t cp_len);
 
-SRSLTE_API cf_t srslte_cp_synch_corr_output(srslte_cp_synch_t *q, 
-                                            uint32_t offset);
+SRSLTE_API cf_t srslte_cp_synch_corr_output(srslte_cp_synch_t* q, uint32_t offset);
 
-#endif // CP_
+#endif // SRSLTE_CP_H

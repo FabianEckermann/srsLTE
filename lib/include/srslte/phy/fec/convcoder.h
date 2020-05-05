@@ -1,12 +1,7 @@
-/**
+/*
+ * Copyright 2013-2020 Software Radio Systems Limited
  *
- * \section COPYRIGHT
- *
- * Copyright 2013-2015 Software Radio Systems Limited
- *
- * \section LICENSE
- *
- * This file is part of the srsLTE library.
+ * This file is part of srsLTE.
  *
  * srsLTE is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Affero General Public License as
@@ -34,23 +29,19 @@
  *  Reference:    3GPP TS 36.212 version 10.0.0 Release 10 Sec. 5.1.3.1
  *********************************************************************************************/
 
-#ifndef CONVCODER_
-#define CONVCODER_
+#ifndef SRSLTE_CONVCODER_H
+#define SRSLTE_CONVCODER_H
 
-#include <stdbool.h>
 #include "srslte/config.h"
+#include <stdbool.h>
 
 typedef struct SRSLTE_API {
   uint32_t R;
   uint32_t K;
-  int poly[3];
-  bool tail_biting;
-}srslte_convcoder_t;
+  int      poly[3];
+  bool     tail_biting;
+} srslte_convcoder_t;
 
-SRSLTE_API int srslte_convcoder_encode(srslte_convcoder_t *q, 
-                                       uint8_t *input, 
-                                       uint8_t *output, 
-                                       uint32_t frame_length);
+SRSLTE_API int srslte_convcoder_encode(srslte_convcoder_t* q, uint8_t* input, uint8_t* output, uint32_t frame_length);
 
-
-#endif
+#endif // SRSLTE_CONVCODER_H

@@ -1,12 +1,7 @@
-/**
+/*
+ * Copyright 2013-2020 Software Radio Systems Limited
  *
- * \section COPYRIGHT
- *
- * Copyright 2013-2015 Software Radio Systems Limited
- *
- * \section LICENSE
- *
- * This file is part of the srsLTE library.
+ * This file is part of srsLTE.
  *
  * srsLTE is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Affero General Public License as
@@ -33,8 +28,8 @@
  *  Reference:    3GPP TS 36.211 version 10.0.0 Release 10 Sec. 5.3.3
  *********************************************************************************************/
 
-#ifndef DFTPREC_
-#define DFTPREC_
+#ifndef SRSLTE_DFT_PRECODING_H
+#define SRSLTE_DFT_PRECODING_H
 
 #include "srslte/config.h"
 #include "srslte/phy/common/phy_common.h"
@@ -43,29 +38,24 @@
 /* DFT-based Transform Precoding object */
 typedef struct SRSLTE_API {
 
-  uint32_t max_prb;  
-  srslte_dft_plan_t dft_plan[SRSLTE_MAX_PRB+1];
+  uint32_t          max_prb;
+  srslte_dft_plan_t dft_plan[SRSLTE_MAX_PRB + 1];
 
-}srslte_dft_precoding_t;
+} srslte_dft_precoding_t;
 
-SRSLTE_API int srslte_dft_precoding_init(srslte_dft_precoding_t *q,
-                                         uint32_t max_prb,
-                                         bool is_tx);
+SRSLTE_API int srslte_dft_precoding_init(srslte_dft_precoding_t* q, uint32_t max_prb, bool is_tx);
 
-SRSLTE_API int srslte_dft_precoding_init_tx(srslte_dft_precoding_t *q,
-                                            uint32_t max_prb);
+SRSLTE_API int srslte_dft_precoding_init_tx(srslte_dft_precoding_t* q, uint32_t max_prb);
 
-SRSLTE_API int srslte_dft_precoding_init_rx(srslte_dft_precoding_t *q,
-                                            uint32_t max_prb);
+SRSLTE_API int srslte_dft_precoding_init_rx(srslte_dft_precoding_t* q, uint32_t max_prb);
 
-SRSLTE_API void srslte_dft_precoding_free(srslte_dft_precoding_t *q);
+SRSLTE_API void srslte_dft_precoding_free(srslte_dft_precoding_t* q);
 
-SRSLTE_API bool srslte_dft_precoding_valid_prb(uint32_t nof_prb); 
+SRSLTE_API bool srslte_dft_precoding_valid_prb(uint32_t nof_prb);
 
-SRSLTE_API int srslte_dft_precoding(srslte_dft_precoding_t *q, 
-                                    cf_t *input, 
-                                    cf_t *output, 
-                                    uint32_t nof_prb, 
-                                    uint32_t nof_symbols);
+SRSLTE_API uint32_t srslte_dft_precoding_get_valid_prb(uint32_t nof_prb);
 
-#endif
+SRSLTE_API int
+srslte_dft_precoding(srslte_dft_precoding_t* q, cf_t* input, cf_t* output, uint32_t nof_prb, uint32_t nof_symbols);
+
+#endif // SRSLTE_DFT_PRECODING_H

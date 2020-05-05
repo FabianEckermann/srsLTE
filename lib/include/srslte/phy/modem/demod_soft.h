@@ -1,12 +1,7 @@
-/**
+/*
+ * Copyright 2013-2020 Software Radio Systems Limited
  *
- * \section COPYRIGHT
- *
- * Copyright 2013-2015 Software Radio Systems Limited
- *
- * \section LICENSE
- *
- * This file is part of the srsLTE library.
+ * This file is part of srsLTE.
  *
  * srsLTE is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Affero General Public License as
@@ -33,24 +28,18 @@
  *  Reference:    3GPP TS 36.211 version 10.0.0 Release 10 Sec. 7.1
  *****************************************************************************/
 
-#ifndef DEMOD_SOFT_
-#define DEMOD_SOFT_
+#ifndef SRSLTE_DEMOD_SOFT_H
+#define SRSLTE_DEMOD_SOFT_H
 
-#include <complex.h>
 #include <stdint.h>
 
-#include "srslte/config.h"
 #include "modem_table.h"
+#include "srslte/config.h"
 
+SRSLTE_API int srslte_demod_soft_demodulate(srslte_mod_t modulation, const cf_t* symbols, float* llr, int nsymbols);
 
-SRSLTE_API int srslte_demod_soft_demodulate(srslte_mod_t modulation, 
-                                            const cf_t* symbols, 
-                                            float* llr, 
-                                            int nsymbols); 
+SRSLTE_API int srslte_demod_soft_demodulate_s(srslte_mod_t modulation, const cf_t* symbols, short* llr, int nsymbols);
 
-SRSLTE_API int srslte_demod_soft_demodulate_s(srslte_mod_t modulation, 
-                                              const cf_t* symbols, 
-                                              short* llr, 
-                                              int nsymbols); 
+SRSLTE_API int srslte_demod_soft_demodulate_b(srslte_mod_t modulation, const cf_t* symbols, int8_t* llr, int nsymbols);
 
-#endif // DEMOD_SOFT_
+#endif // SRSLTE_DEMOD_SOFT_H

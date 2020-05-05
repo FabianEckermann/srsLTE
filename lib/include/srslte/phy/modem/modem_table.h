@@ -1,12 +1,7 @@
-/**
+/*
+ * Copyright 2013-2020 Software Radio Systems Limited
  *
- * \section COPYRIGHT
- *
- * Copyright 2013-2015 Software Radio Systems Limited
- *
- * \section LICENSE
- *
- * This file is part of the srsLTE library.
+ * This file is part of srsLTE.
  *
  * srsLTE is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Affero General Public License as
@@ -33,15 +28,14 @@
  *  Reference:    3GPP TS 36.211 version 10.0.0 Release 10 Sec. 7.1
  *****************************************************************************/
 
-#ifndef MODEM_TABLE_
-#define MODEM_TABLE_
+#ifndef SRSLTE_MODEM_TABLE_H
+#define SRSLTE_MODEM_TABLE_H
 
 #include <stdbool.h>
-#include <complex.h>
 #include <stdint.h>
 
-#include "srslte/phy/common/phy_common.h"
 #include "srslte/config.h"
+#include "srslte/phy/common/phy_common.h"
 
 typedef struct {
   cf_t symbol[8];
@@ -56,16 +50,15 @@ typedef struct {
 } qam16_packed_t;
 
 typedef struct SRSLTE_API {
-  cf_t* symbol_table;             // bit-to-symbol mapping
-  uint32_t nsymbols;              // number of modulation symbols
-  uint32_t nbits_x_symbol;        // number of bits per symbol
-  
-  bool byte_tables_init;
-  bpsk_packed_t *symbol_table_bpsk;
-  qpsk_packed_t *symbol_table_qpsk;
-  qam16_packed_t *symbol_table_16qam;  
-}srslte_modem_table_t;
+  cf_t*    symbol_table;   // bit-to-symbol mapping
+  uint32_t nsymbols;       // number of modulation symbols
+  uint32_t nbits_x_symbol; // number of bits per symbol
 
+  bool            byte_tables_init;
+  bpsk_packed_t*  symbol_table_bpsk;
+  qpsk_packed_t*  symbol_table_qpsk;
+  qam16_packed_t* symbol_table_16qam;
+} srslte_modem_table_t;
 
 SRSLTE_API void srslte_modem_table_init(srslte_modem_table_t* q);
 
@@ -73,14 +66,10 @@ SRSLTE_API void srslte_modem_table_free(srslte_modem_table_t* q);
 
 SRSLTE_API void srslte_modem_table_reset(srslte_modem_table_t* q);
 
-SRSLTE_API int srslte_modem_table_set(srslte_modem_table_t* q, 
-                                      cf_t* table, 
-                                      uint32_t nsymbols, 
-                                      uint32_t nbits_x_symbol);
+SRSLTE_API int srslte_modem_table_set(srslte_modem_table_t* q, cf_t* table, uint32_t nsymbols, uint32_t nbits_x_symbol);
 
-SRSLTE_API int srslte_modem_table_lte(srslte_modem_table_t* q, 
-                                      srslte_mod_t modulation);
+SRSLTE_API int srslte_modem_table_lte(srslte_modem_table_t* q, srslte_mod_t modulation);
 
-SRSLTE_API void srslte_modem_table_bytes(srslte_modem_table_t* q); 
+SRSLTE_API void srslte_modem_table_bytes(srslte_modem_table_t* q);
 
-#endif // MODEM_TABLE_
+#endif // SRSLTE_MODEM_TABLE_H
