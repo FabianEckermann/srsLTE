@@ -115,7 +115,7 @@ TEST(srslte_vec_acc_ff, MALLOC(float, x); float z = 0;
 
          for (int i = 0; i < block_size; i++) { gold += x[i]; }
 
-     mse += fabs(gold - z) / gold;
+     mse += cabsf(gold - z) / gold;
 
      free(x);)
 
@@ -399,7 +399,7 @@ TEST(srslte_vec_convert_fi, MALLOC(float, x); MALLOC(short, z); float scale = 10
 
          for (int i = 0; i < block_size; i++) {
            gold       = (short)((x[i] * scale));
-           double err = cabsf((float)gold - (float)z[i]);
+           double err = fabsf((float)gold - (float)z[i]);
            if (err > mse) {
              mse = err;
            }
@@ -407,6 +407,30 @@ TEST(srslte_vec_convert_fi, MALLOC(float, x); MALLOC(short, z); float scale = 10
 
      free(x);
      free(z);)
+
+TEST(
+    srslte_vec_convert_conj_cs, MALLOC(cf_t, x); int16_t* z = srslte_vec_i16_malloc(block_size * 2);
+    float scale = 1000.0f;
+
+    short gold_re;
+    short gold_im;
+    for (int i = 0; i < block_size; i++) { x[i] = RANDOM_CF(); }
+
+    TEST_CALL(srslte_vec_convert_conj_cs(x, scale, z, block_size))
+
+        for (int i = 0; i < block_size; i++) {
+          gold_re    = (short)(crealf(x[i]) * scale);
+          gold_im    = (short)(cimagf(-x[i]) * scale);
+          cf_t   t1  = (float)gold_re + I * (float)gold_im;
+          cf_t   t2  = (float)z[2 * i] + I * (float)z[2 * i + 1];
+          double err = cabsf(t1 - t2);
+          if (err > mse) {
+            mse = err;
+          }
+        }
+
+    free(x);
+    free(z);)
 
 TEST(srslte_vec_convert_if, MALLOC(int16_t, x); MALLOC(float, z); float scale = 1000.0f;
 
@@ -418,7 +442,7 @@ TEST(srslte_vec_convert_if, MALLOC(int16_t, x); MALLOC(float, z); float scale = 
 
          for (int i = 0; i < block_size; i++) {
            gold       = ((float)x[i]) * k;
-           double err = cabsf((float)gold - (float)z[i]);
+           double err = fabsf((float)gold - (float)z[i]);
            if (err > mse) {
              mse = err;
            }
@@ -482,7 +506,7 @@ TEST(srslte_vec_sc_prod_fff, MALLOC(float, x); MALLOC(float, z); float y = RANDO
 
          for (int i = 0; i < block_size; i++) {
            gold = x[i] * y;
-           mse += cabsf(gold - z[i]);
+           mse += fabsf(gold - z[i]);
          }
 
      free(x);
@@ -497,7 +521,7 @@ TEST(
 
         for (int i = 0; i < block_size; i++) {
           gold = sqrtf(crealf(x[i]) * crealf(x[i]) + cimagf(x[i]) * cimagf(x[i]));
-          mse += cabsf(gold - z[i]) / block_size;
+          mse += fabsf(gold - z[i]) / block_size;
         }
 
     free(x);
@@ -511,7 +535,7 @@ TEST(srslte_vec_abs_square_cf, MALLOC(cf_t, x); MALLOC(float, z); float gold;
 
          for (int i = 0; i < block_size; i++) {
            gold = crealf(x[i]) * crealf(x[i]) + cimagf(x[i]) * cimagf(x[i]);
-           mse += cabsf(gold - z[i]);
+           mse += fabsf(gold - z[i]);
          }
 
      free(x);
@@ -589,6 +613,22 @@ TEST(
 
     free(x);
     free(y);
+    free(z);)
+
+TEST(
+    srslte_vec_conj_cc, MALLOC(cf_t, x); MALLOC(cf_t, z);
+
+    cf_t gold;
+    for (int i = 0; i < block_size; i++) { x[i] = RANDOM_CF(); }
+
+    TEST_CALL(srslte_vec_conj_cc(x, z, block_size))
+
+        for (int i = 0; i < block_size; i++) {
+          gold = conjf(x[i]);
+          mse += cabsf(gold - z[i]);
+        }
+
+    free(x);
     free(z);)
 
 TEST(
@@ -803,6 +843,10 @@ int main(int argc, char** argv)
     func_count++;
 
     passed[func_count][size_count] =
+        test_srslte_vec_convert_conj_cs(func_names[func_count], &timmings[func_count][size_count], block_size);
+    func_count++;
+
+    passed[func_count][size_count] =
         test_srslte_vec_convert_if(func_names[func_count], &timmings[func_count][size_count], block_size);
     func_count++;
 
@@ -856,6 +900,10 @@ int main(int argc, char** argv)
 
     passed[func_count][size_count] =
         test_srslte_vec_div_fff(func_names[func_count], &timmings[func_count][size_count], block_size);
+    func_count++;
+
+    passed[func_count][size_count] =
+        test_srslte_vec_conj_cc(func_names[func_count], &timmings[func_count][size_count], block_size);
     func_count++;
 
     passed[func_count][size_count] =

@@ -59,6 +59,10 @@ static inline int parse_string(char* args, const char* config_arg_base, int chan
 {
   int ret = SRSLTE_ERROR;
 
+  if (args == NULL) {
+    return ret;
+  }
+
   char  config_key[RF_PARAM_LEN] = {0};
   char  config_str[RF_PARAM_LEN] = {0};
   char* config_ptr               = NULL;
@@ -82,8 +86,9 @@ static inline int parse_string(char* args, const char* config_arg_base, int chan
       printf("CHx %s=%s\n", config_arg_base, config_str);
     }
 
-    strncpy(param_dst, config_str, RF_PARAM_LEN);
-    param_dst[RF_PARAM_LEN - 1] = 0;
+    if (snprintf(param_dst, RF_PARAM_LEN, "%s", config_str) < 0) {
+      return SRSLTE_ERROR;
+    }
 
     // concatenate key=value and remove both (avoid removing the same value twice if it occurs twice in rf_args)
     char config_pair[RF_PARAM_LEN * 2] = {0};
@@ -111,12 +116,12 @@ static inline int parse_double(char* args, const char* config_arg_base, int chan
 
 static inline int parse_uint32(char* args, const char* config_arg_base, int channel_index, uint32_t* value)
 {
-  double tmp_value;
-  int    ret = parse_double(args, config_arg_base, channel_index, &tmp_value);
+  char tmp_value[RF_PARAM_LEN] = {0};
+  int  ret                     = parse_string(args, config_arg_base, channel_index, tmp_value);
 
   // Copy parsed value only if was found, otherwise it keeps the default
   if (ret == SRSLTE_SUCCESS) {
-    *value = tmp_value;
+    *value = (uint32_t)strtof(tmp_value, NULL);
   }
 
   return ret;

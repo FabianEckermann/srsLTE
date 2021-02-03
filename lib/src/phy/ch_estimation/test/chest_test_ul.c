@@ -164,7 +164,7 @@ int main(int argc, char** argv)
               }
               pusch_cfg.group_hopping_en    = group_hopping_en;
               pusch_cfg.sequence_hopping_en = sequence_hopping_en;
-              srslte_chest_ul_pregen(&est, &pusch_cfg);
+              srslte_chest_ul_pregen(&est, &pusch_cfg, NULL);
 
               // Loop through subframe idx and cyclic shifts
 
@@ -182,7 +182,7 @@ int main(int argc, char** argv)
                   /* Generate random input */
                   srslte_vec_cf_zero(input, num_re);
                   for (i = 0; i < num_re; i++) {
-                    input[i] = 0.5 - rand() / RAND_MAX + I * (0.5 - (float)rand() / RAND_MAX);
+                    input[i] = 0.5 - rand() / (float)RAND_MAX + I * (0.5 - rand() / (float)RAND_MAX);
                   }
 
                   /* Generate channel and pass input through channel */

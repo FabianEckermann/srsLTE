@@ -27,7 +27,6 @@
 #include <string.h>
 
 #define DUMP_SIGNALS 0
-#define CURRENT_SFLEN_RE SRSLTE_SF_LEN_RE(SRSLTE_NBIOT_MAX_PRB, SRSLTE_CP_NORM)
 
 static srslte_dci_format_t nb_ue_formats[]   = {SRSLTE_DCI_FORMATN0, SRSLTE_DCI_FORMATN1};
 const uint32_t             nof_nb_ue_formats = 2;
@@ -53,52 +52,53 @@ int srslte_nbiot_ue_dl_init(srslte_nbiot_ue_dl_t* q,
     q->bits_total    = 0;
     q->sample_offset = 0;
     q->mib_set       = false;
+    q->nof_re        = SRSLTE_SF_LEN_RE(SRSLTE_NBIOT_MAX_PRB, SRSLTE_CP_NORM);
 
     // for transmissions using only single subframe
-    q->sf_symbols = srslte_vec_cf_malloc(CURRENT_SFLEN_RE);
+    q->sf_symbols = srslte_vec_cf_malloc(q->nof_re);
     if (!q->sf_symbols) {
       perror("malloc");
       goto clean_exit;
     }
-    srslte_vec_cf_zero(q->sf_symbols, CURRENT_SFLEN_RE);
+    srslte_vec_cf_zero(q->sf_symbols, q->nof_re);
 
     for (uint32_t i = 0; i < SRSLTE_MAX_PORTS; i++) {
-      q->ce[i] = srslte_vec_cf_malloc(CURRENT_SFLEN_RE);
+      q->ce[i] = srslte_vec_cf_malloc(q->nof_re);
       if (!q->ce[i]) {
         perror("malloc");
         goto clean_exit;
       }
-      for (int k = 0; k < CURRENT_SFLEN_RE; k++) {
+      for (int k = 0; k < q->nof_re; k++) {
         q->ce[i][k] = 1;
       }
     }
 
     // allocate memory for symbols and estimates for tx spanning multiple subframes
     // TODO: only buffer softbits rather than raw samples
-    q->sf_buffer = srslte_vec_cf_malloc(CURRENT_SFLEN_RE * SRSLTE_NPDSCH_MAX_NOF_SF);
+    q->sf_buffer = srslte_vec_cf_malloc(q->nof_re * SRSLTE_NPDSCH_MAX_NOF_SF);
     if (!q->sf_buffer) {
       perror("malloc");
       goto clean_exit;
     }
-    srslte_vec_cf_zero(q->sf_buffer, CURRENT_SFLEN_RE * SRSLTE_NPDSCH_MAX_NOF_SF);
+    srslte_vec_cf_zero(q->sf_buffer, q->nof_re * SRSLTE_NPDSCH_MAX_NOF_SF);
 
     for (uint32_t i = 0; i < SRSLTE_MAX_PORTS; i++) {
-      q->ce_buffer[i] = srslte_vec_cf_malloc(CURRENT_SFLEN_RE * SRSLTE_NPDSCH_MAX_NOF_SF);
+      q->ce_buffer[i] = srslte_vec_cf_malloc(q->nof_re * SRSLTE_NPDSCH_MAX_NOF_SF);
       if (!q->ce_buffer[i]) {
         perror("malloc");
         goto clean_exit;
       }
-      for (int k = 0; k < (CURRENT_SFLEN_RE * SRSLTE_NPDSCH_MAX_NOF_SF); k++) {
+      for (int k = 0; k < (q->nof_re * SRSLTE_NPDSCH_MAX_NOF_SF); k++) {
         q->ce_buffer[i][k] = 1;
       }
     }
 
     // allocate memory for soft-bits
-    q->llr = srslte_vec_f_malloc(CURRENT_SFLEN_RE * SRSLTE_NPDSCH_MAX_NOF_SF * 2);
+    q->llr = srslte_vec_f_malloc(q->nof_re * SRSLTE_NPDSCH_MAX_NOF_SF * 2);
     if (!q->llr) {
       goto clean_exit;
     }
-    srslte_vec_f_zero(q->llr, CURRENT_SFLEN_RE * SRSLTE_NPDSCH_MAX_NOF_SF * 2);
+    srslte_vec_f_zero(q->llr, q->nof_re * SRSLTE_NPDSCH_MAX_NOF_SF * 2);
 
     // initialize memory
     if (srslte_ofdm_rx_init(&q->fft, SRSLTE_CP_NORM, in_buffer[0], q->sf_symbols, max_prb)) {
@@ -588,14 +588,14 @@ uint32_t srslte_nbiot_ue_dl_get_ncce(srslte_nbiot_ue_dl_t* q)
   return q->last_n_cce;
 }
 
-#define MAX_CANDIDATES_UE 3 // From 36.213 Table 16.6-1 NPDCCH Format0 and NPDCCH Format1
-#define MAX_CANDIDATES_COM                                                                                             \
+#define SRSLTE_MAX_CANDIDATES_UE 3 // From 36.213 Table 16.6-1 NPDCCH Format0 and NPDCCH Format1
+#define SRSLTE_MAX_CANDIDATES_COM                                                                                      \
   1 // From 36.213 Table 16.6-2 and Table 16.6-3, only AL2 is defined here which uses NPDCCH Format1
-#define MAX_CANDIDATES (MAX_CANDIDATES_UE + MAX_CANDIDATES_COM)
+#define SRSLTE_MAX_CANDIDATES (SRSLTE_MAX_CANDIDATES_UE + SRSLTE_MAX_CANDIDATES_COM)
 
 typedef struct {
   srslte_dci_format_t   format;
-  srslte_dci_location_t loc[MAX_CANDIDATES];
+  srslte_dci_location_t loc[SRSLTE_MAX_CANDIDATES];
   uint32_t              nof_locations;
 } dci_blind_search_t;
 
@@ -646,7 +646,7 @@ int srslte_nbiot_ue_dl_find_dl_dci_type_siprarnti(srslte_nbiot_ue_dl_t* q, uint1
   // Configure and run DCI blind search
   dci_blind_search_t search_space;
 
-  search_space.nof_locations = srslte_npdcch_common_locations(search_space.loc, MAX_CANDIDATES_COM);
+  search_space.nof_locations = srslte_npdcch_common_locations(search_space.loc, SRSLTE_MAX_CANDIDATES_COM);
   DEBUG(
       "Searching SI/P/RA-RNTI in %d common locations, %d formats\n", search_space.nof_locations, nb_nof_common_formats);
   // Search for RNTI only if there is room for the common search space
@@ -671,7 +671,7 @@ int srslte_nbiot_ue_dl_find_dl_dci_type_crnti(srslte_nbiot_ue_dl_t* q,
 
   // Search UE-specific search space
   dci_blind_search_t search_space;
-  search_space.nof_locations = srslte_npdcch_ue_locations(search_space.loc, MAX_CANDIDATES_UE);
+  search_space.nof_locations = srslte_npdcch_ue_locations(search_space.loc, SRSLTE_MAX_CANDIDATES_UE);
   DEBUG("x.%d: Searching DL C-RNTI=0x%x in %d locations, %d formats\n",
         sf_idx,
         rnti,
@@ -745,7 +745,12 @@ int srslte_nbiot_ue_dl_decode_npdsch(srslte_nbiot_ue_dl_t* q,
  */
 int srslte_nbiot_ue_dl_decode_npdsch_no_bcch(srslte_nbiot_ue_dl_t* q, uint8_t* data, uint32_t tti, uint16_t rnti)
 {
-  int ret = SRSLTE_ERROR;
+  int ret = SRSLTE_ERROR_INVALID_INPUTS;
+
+  if (q->npdsch_cfg.sf_idx >= SRSLTE_NPDSCH_MAX_NOF_SF) {
+    ERROR("Invalid npdsch_cfg.sf_idx=%d\n", q->npdsch_cfg.sf_idx);
+    return ret;
+  }
 
   INFO("%d.%d: NPDSCH processing sf_idx=%d/%d rep=%d/%d tot=%d/%d\n",
        tti / 10,
@@ -759,21 +764,21 @@ int srslte_nbiot_ue_dl_decode_npdsch_no_bcch(srslte_nbiot_ue_dl_t* q, uint8_t* d
 
   if (q->npdsch_cfg.num_sf % q->npdsch_cfg.grant.nof_rep == 0) {
     // copy data and ce symbols for first repetition of each subframe
-    memcpy(&q->sf_buffer[q->npdsch_cfg.sf_idx * CURRENT_SFLEN_RE], q->sf_symbols, CURRENT_SFLEN_RE * sizeof(cf_t));
+    srslte_vec_cf_copy(&q->sf_buffer[q->npdsch_cfg.sf_idx * q->nof_re], q->sf_symbols, q->nof_re);
     for (int i = 0; i < q->cell.nof_ports; i++) {
-      memcpy(&q->ce_buffer[i][q->npdsch_cfg.sf_idx * CURRENT_SFLEN_RE], q->ce[i], CURRENT_SFLEN_RE * sizeof(cf_t));
+      srslte_vec_cf_copy(&q->ce_buffer[i][q->npdsch_cfg.sf_idx * q->nof_re], q->ce[i], q->nof_re);
     }
   } else {
     // accumulate subframe samples and channel estimates
-    srslte_vec_sum_ccc(&q->sf_buffer[q->npdsch_cfg.sf_idx * CURRENT_SFLEN_RE],
+    srslte_vec_sum_ccc(&q->sf_buffer[q->npdsch_cfg.sf_idx * q->nof_re],
                        q->sf_symbols,
-                       &q->sf_buffer[q->npdsch_cfg.sf_idx * CURRENT_SFLEN_RE],
-                       CURRENT_SFLEN_RE);
+                       &q->sf_buffer[q->npdsch_cfg.sf_idx * q->nof_re],
+                       q->nof_re);
     for (int i = 0; i < q->cell.nof_ports; i++) {
-      srslte_vec_sum_ccc(&q->ce_buffer[i][q->npdsch_cfg.sf_idx * CURRENT_SFLEN_RE],
+      srslte_vec_sum_ccc(&q->ce_buffer[i][q->npdsch_cfg.sf_idx * q->nof_re],
                          q->ce[i],
-                         &q->ce_buffer[i][q->npdsch_cfg.sf_idx * CURRENT_SFLEN_RE],
-                         CURRENT_SFLEN_RE);
+                         &q->ce_buffer[i][q->npdsch_cfg.sf_idx * q->nof_re],
+                         q->nof_re);
     }
   }
   q->npdsch_cfg.num_sf++;
@@ -783,15 +788,15 @@ int srslte_nbiot_ue_dl_decode_npdsch_no_bcch(srslte_nbiot_ue_dl_t* q, uint8_t* d
   int m = SRSLTE_MIN(q->npdsch_cfg.grant.nof_rep, 4);
   if (q->npdsch_cfg.rep_idx % m == 0) {
     // average accumulated samples
-    srslte_vec_sc_prod_ccc(&q->sf_buffer[q->npdsch_cfg.sf_idx * CURRENT_SFLEN_RE],
+    srslte_vec_sc_prod_ccc(&q->sf_buffer[q->npdsch_cfg.sf_idx * q->nof_re],
                            1.0 / m,
-                           &q->sf_buffer[q->npdsch_cfg.sf_idx * CURRENT_SFLEN_RE],
-                           CURRENT_SFLEN_RE);
+                           &q->sf_buffer[q->npdsch_cfg.sf_idx * q->nof_re],
+                           q->nof_re);
     for (int i = 0; i < q->cell.nof_ports; i++) {
-      srslte_vec_sc_prod_ccc(&q->ce_buffer[i][q->npdsch_cfg.sf_idx * CURRENT_SFLEN_RE],
+      srslte_vec_sc_prod_ccc(&q->ce_buffer[i][q->npdsch_cfg.sf_idx * q->nof_re],
                              1.0 / m,
-                             &q->ce_buffer[i][q->npdsch_cfg.sf_idx * CURRENT_SFLEN_RE],
-                             CURRENT_SFLEN_RE);
+                             &q->ce_buffer[i][q->npdsch_cfg.sf_idx * q->nof_re],
+                             q->nof_re);
     }
 
     q->npdsch_cfg.sf_idx++;
@@ -857,9 +862,9 @@ int srslte_nbiot_ue_dl_decode_npdsch_bcch(srslte_nbiot_ue_dl_t* q, uint8_t* data
          q->npdsch_cfg.grant.nof_sf * q->npdsch_cfg.grant.nof_rep);
 
     // copy data and ce symbols
-    memcpy(&q->sf_buffer[q->npdsch_cfg.sf_idx * CURRENT_SFLEN_RE], q->sf_symbols, CURRENT_SFLEN_RE * sizeof(cf_t));
+    srslte_vec_cf_copy(&q->sf_buffer[q->npdsch_cfg.sf_idx * q->nof_re], q->sf_symbols, q->nof_re);
     for (int i = 0; i < q->cell.nof_ports; i++) {
-      memcpy(&q->ce_buffer[i][q->npdsch_cfg.sf_idx * CURRENT_SFLEN_RE], q->ce[i], CURRENT_SFLEN_RE * sizeof(cf_t));
+      srslte_vec_cf_copy(&q->ce_buffer[i][q->npdsch_cfg.sf_idx * q->nof_re], q->ce[i], q->nof_re);
     }
     q->npdsch_cfg.num_sf++;
     q->npdsch_cfg.sf_idx++;
@@ -994,7 +999,7 @@ int srslte_nbiot_ue_dl_find_ul_dci(srslte_nbiot_ue_dl_t* q, uint32_t tti, uint32
 
   // Search UE-specific search space
   dci_blind_search_t search_space;
-  search_space.nof_locations = srslte_npdcch_ue_locations(search_space.loc, MAX_CANDIDATES_UE);
+  search_space.nof_locations = srslte_npdcch_ue_locations(search_space.loc, SRSLTE_MAX_CANDIDATES_UE);
   DEBUG("x.%d: Searching UL C-RNTI=0x%x in %d locations, %d formats\n",
         tti % 10,
         rnti,

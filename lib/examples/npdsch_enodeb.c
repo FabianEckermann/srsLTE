@@ -324,7 +324,7 @@ void sig_int_handler(int signo)
 }
 #endif
 
-int update_radl()
+static int update_radl(void)
 {
   bzero(&ra_dl_sib1, sizeof(srslte_ra_nbiot_dl_dci_t));
 
@@ -362,7 +362,7 @@ int update_radl()
 }
 
 /* Read new MCS from stdin */
-int update_control()
+static int update_control(void)
 {
   char input[128];
 
@@ -511,12 +511,13 @@ int main(int argc, char** argv)
       fprintf(stderr, "Invalid number of PRB %d\n", cell.base.nof_prb);
       exit(-1);
     }
-    printf("Set TX gain: %.1f dB\n", srslte_rf_set_tx_gain(&radio, rf_gain));
+    srslte_rf_set_tx_gain(&radio, rf_gain);
+    printf("Set TX gain: %.1f dB\n", srslte_rf_get_tx_gain(&radio));
     printf("Set TX freq: %.2f MHz\n", srslte_rf_set_tx_freq(&radio, 0, rf_freq) / 1000000);
   }
 #endif
 
-  if (update_radl(sf_idx)) {
+  if (update_radl()) {
     exit(-1);
   }
 
@@ -626,7 +627,7 @@ int main(int argc, char** argv)
       }
 
       // Update DL resource allocation from control port
-      if (update_control(sf_idx)) {
+      if (update_control()) {
         fprintf(stderr, "Error updating parameters from control port\n");
       }
 

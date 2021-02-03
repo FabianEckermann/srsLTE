@@ -55,9 +55,7 @@ sim_sched_args generate_default_sim_args(uint32_t nof_prb, uint32_t nof_ccs)
 {
   sim_sched_args sim_args;
 
-  sim_args.P_retx = 0.1;
-
-  sim_args.ue_cfg = generate_default_ue_cfg();
+  sim_args.default_ue_sim_cfg.ue_cfg = generate_default_ue_cfg2();
 
   // setup two cells
   std::vector<srsenb::sched_interface::cell_cfg_t> cell_cfg(nof_ccs, generate_default_cell_cfg(nof_prb));
@@ -71,10 +69,10 @@ sim_sched_args generate_default_sim_args(uint32_t nof_prb, uint32_t nof_ccs)
   sim_args.cell_cfg                                  = std::move(cell_cfg);
 
   /* Setup Derived Params */
-  sim_args.ue_cfg.supported_cc_list.resize(nof_ccs);
-  for (uint32_t i = 0; i < sim_args.ue_cfg.supported_cc_list.size(); ++i) {
-    sim_args.ue_cfg.supported_cc_list[i].active     = true;
-    sim_args.ue_cfg.supported_cc_list[i].enb_cc_idx = i;
+  sim_args.default_ue_sim_cfg.ue_cfg.supported_cc_list.resize(nof_ccs);
+  for (uint32_t i = 0; i < sim_args.default_ue_sim_cfg.ue_cfg.supported_cc_list.size(); ++i) {
+    sim_args.default_ue_sim_cfg.ue_cfg.supported_cc_list[i].active     = true;
+    sim_args.default_ue_sim_cfg.ue_cfg.supported_cc_list[i].enb_cc_idx = i;
   }
 
   return sim_args;
@@ -93,18 +91,6 @@ int test_scell_activation(test_scell_activation_params params)
   uint32_t nof_ccs   = 2;
   uint32_t start_tti = 0; // rand_int(0, 10240);
 
-  /* Setup simulation arguments struct */
-  sim_sched_args sim_args = generate_default_sim_args(nof_prb, nof_ccs);
-  sim_args.sim_log        = log_global.get();
-  sim_args.start_tti      = start_tti;
-
-  /* Simulation Objects Setup */
-  sched_sim_event_generator generator;
-  // Setup scheduler
-  common_sched_tester tester;
-  tester.init(nullptr);
-  tester.sim_cfg(sim_args);
-
   /* Internal configurations. Do not touch */
   float          ul_sr_exps[]   = {1, 4}; // log rand
   float          dl_data_exps[] = {1, 4}; // log rand
@@ -121,27 +107,43 @@ int test_scell_activation(test_scell_activation_params params)
   std::shuffle(cc_idxs.begin(), cc_idxs.end(), get_rand_gen());
   std::iter_swap(cc_idxs.begin(), std::find(cc_idxs.begin(), cc_idxs.end(), params.pcell_idx));
 
+  /* Setup simulation arguments struct */
+  sim_sched_args sim_args = generate_default_sim_args(nof_prb, nof_ccs);
+  sim_args.sim_log        = log_global.get();
+  sim_args.start_tti      = start_tti;
+  sim_args.default_ue_sim_cfg.ue_cfg.supported_cc_list.resize(1);
+  sim_args.default_ue_sim_cfg.ue_cfg.supported_cc_list[0].active                                = true;
+  sim_args.default_ue_sim_cfg.ue_cfg.supported_cc_list[0].enb_cc_idx                            = cc_idxs[0];
+  sim_args.default_ue_sim_cfg.ue_cfg.supported_cc_list[0].dl_cfg.cqi_report.periodic_configured = true;
+  sim_args.default_ue_sim_cfg.ue_cfg.supported_cc_list[0].dl_cfg.cqi_report.pmi_idx             = 37;
+
+  /* Simulation Objects Setup */
+  sched_sim_event_generator generator;
+  // Setup scheduler
+  common_sched_tester tester;
+  tester.init(nullptr);
+  tester.sim_cfg(sim_args);
+
   /* Simulation */
 
   // Event PRACH: PRACH takes place for "rnti1", and carrier "pcell_idx"
   generator.step_until(prach_tti);
-  tti_ev::user_cfg_ev* user                     = generator.add_new_default_user(duration);
-  user->ue_cfg->supported_cc_list[0].enb_cc_idx = cc_idxs[0];
-  user->rnti                                    = rnti1;
+  tti_ev::user_cfg_ev* user = generator.add_new_default_user(duration, sim_args.default_ue_sim_cfg.ue_cfg);
+  user->rnti                = rnti1;
   tester.test_next_ttis(generator.tti_events);
   TESTASSERT(tester.ue_tester->user_exists(rnti1));
 
   // Event (TTI=prach_tti+msg4_tot_delay): First Tx (Msg4). Goes in SRB0 and contains ConRes
-  while (not tester.ue_tester->get_user_state(rnti1)->msg3_tic.is_valid() or
-         tester.ue_tester->get_user_state(rnti1)->msg3_tic.tti_rx() > generator.tti_counter) {
+  while (not tester.ue_tester->get_user_ctxt(rnti1)->msg3_tti.is_valid() or
+         tester.ue_tester->get_user_ctxt(rnti1)->msg3_tti.to_uint() > generator.tti_counter) {
     generator.step_tti();
     tester.test_next_ttis(generator.tti_events);
   }
   generator.step_tti();
   generator.add_dl_data(rnti1, msg4_size);
   tester.test_next_ttis(generator.tti_events);
-  while (not tester.ue_tester->get_user_state(rnti1)->msg4_tic.is_valid() or
-         tester.ue_tester->get_user_state(rnti1)->msg4_tic.tti_rx() > generator.tti_counter) {
+  while (not tester.ue_tester->get_user_ctxt(rnti1)->msg4_tti.is_valid() or
+         tester.ue_tester->get_user_ctxt(rnti1)->msg4_tti.to_uint() > generator.tti_counter) {
     generator.step_tti();
     tester.test_next_ttis(generator.tti_events);
   }
@@ -161,17 +163,18 @@ int test_scell_activation(test_scell_activation_params params)
       }
     }
   };
-  generate_data(20, P_dl, P_ul_sr, randf());
+  generate_data(20, 1.0, P_ul_sr, randf());
   tester.test_next_ttis(generator.tti_events);
 
   // Event: Reconf Complete. Activate SCells. Check if CE correctly transmitted
   generator.step_tti();
-  user          = generator.user_reconf(rnti1);
-  *user->ue_cfg = *tester.get_current_ue_cfg(rnti1); // use current cfg as starting point, and add more supported ccs
-  user->ue_cfg->supported_cc_list.resize(nof_ccs);
-  for (uint32_t i = 0; i < user->ue_cfg->supported_cc_list.size(); ++i) {
-    user->ue_cfg->supported_cc_list[i].active     = true;
-    user->ue_cfg->supported_cc_list[i].enb_cc_idx = cc_idxs[i];
+  user = generator.user_reconf(rnti1);
+  user->ue_sim_cfg->ue_cfg =
+      *tester.get_current_ue_cfg(rnti1); // use current cfg as starting point, and add more supported ccs
+  user->ue_sim_cfg->ue_cfg.supported_cc_list.resize(nof_ccs);
+  for (uint32_t i = 0; i < user->ue_sim_cfg->ue_cfg.supported_cc_list.size(); ++i) {
+    user->ue_sim_cfg->ue_cfg.supported_cc_list[i].active     = true;
+    user->ue_sim_cfg->ue_cfg.supported_cc_list[i].enb_cc_idx = cc_idxs[i];
   }
   tester.test_next_ttis(generator.tti_events);
   auto activ_list = tester.get_enb_ue_cc_map(rnti1);
@@ -222,10 +225,15 @@ int test_scell_activation(test_scell_activation_params params)
   }
   generate_data(10, 1.0, 1.0, 1.0);
   tester.test_next_ttis(generator.tti_events);
+  uint64_t tot_dl_sched_data = 0;
+  uint64_t tot_ul_sched_data = 0;
   for (const auto& c : cc_idxs) {
-    TESTASSERT(tester.sched_stats->users[rnti1].tot_dl_sched_data[c] > 0);
-    TESTASSERT(tester.sched_stats->users[rnti1].tot_ul_sched_data[c] > 0);
+    tot_dl_sched_data += tester.sched_stats->users[rnti1].tot_dl_sched_data[c];
+    tot_ul_sched_data += tester.sched_stats->users[rnti1].tot_ul_sched_data[c];
   }
+
+  TESTASSERT(tot_dl_sched_data > 0);
+  TESTASSERT(tot_ul_sched_data > 0);
 
   log_global->info("[TESTER] Sim1 finished successfully\n");
   return SRSLTE_SUCCESS;
